@@ -31,15 +31,39 @@ git clone git@github.com:VisionTrekker/Nav3D.git
 ## Global Constraints
 
 - **ROS 2 发行版**:仅支持 Humble (Ubuntu 22.04)
-- **命名空间**:所有发布 / 订阅统一前缀 `/nav3d/`,评判在节点代码层完成还是使用launch remap 更清晰方便
-- **话题命名**:统一 `/nav3d/*` 前缀,按 producer 命名空间(如 `/nav3d/lio/odom`、`/nav3d/local_planner/cmd_vel`)。ROS2 话题 token 不能以数字开头,故用 `nav3d`
-- **tf frame**: `map → odom → base_link → lidar_frame`,`map ≡ odom` 静态发布
-- **上游代码约定**:仅改话题字符串,**不修改算法**
+- **tf frame**: `map → odom → base_link → lidar_frame`(LIO 内部 `world`/`IMU`/`body`/`lidar` 经 C++ `#define` 重命名为 `odom`/`base_link`/`base_link`/`lidar_frame`)
+- **话题命名**:**per-module 子命名空间**(`/lio/mapping/*`、`/lio/localization/*`、`/map_loader/*`、`/scan_context_loop/*`、`/global_planner/*`、`/local_planner/*`);**生态/标准 topic 不加前缀**(`/livox/*`、`/cmd_vel`、`/goal_pose`、`/initialpose`、`/tf*`)。`local_planner/cmd_vel` 在 driver 节点 launch remap 回 `/cmd_vel`
+- **上游代码约定**:仅 **boundary adapter** 层 patch(frame_id 字面量 `#define`、topic yaml 字段、launch remap),**不修改算法**
 - **许可证**:项目对外保留各上游原许可证
-- **仿真优先**:本计划目标是先 Gazebo 闭环，验证算法后实机部署
+- **测试入口**:**仅 bag replay**(`/media/lenovo/disk/planner_ws/data-rosbag2/Campus3` 截电梯末段);禁用 GazeboQuadbot(频率低)与实机自录 bag(CustomMsg 丢包)
 - **提交规范**:Conventional Commits,每次可验证任务完成后必须 commit
 - **colcon cmake 标志(强制)**:所有 `colcon build` 命令必须传 `--cmake-args -DHUMBLE_ROS=humble`,否则 `livox_ros_driver2` 会因 `LIVOX_INTERFACES_INCLUDE_DIRECTORIES=NOTFOUND` 失败
 - **依赖项前置**:Livox-SDK2 必须已 source build 到 `/usr/local/`(非 apt、非 git submodule);`rosdep install` 可能报 apr-1 / libapr1-dev 缺失,但 optional 不阻塞
+
+## 设计摘要 (2026-08-17 修订)
+
+> 完整设计见 `docs/superpowers/specs/2026-08-17-go2w-3d-nav-design.md`(本地 spec,gitignored)。本节为缓存摘要。
+
+**架构**:9 个组件协作,数据流为 `sensor → lio_mapping → save_map → map_loader_node → lio_localization + scan_context_loop_node → global_planner → local_planner → driver`。
+
+**关键决策**:
+
+| 项 | 决策 |
+|---|---|
+| 建图 vs 定位 | **双节点**:`lio_mapping`(建图)与 `lio_localization`(运行) |
+| TF 根帧 | `map`;`map → odom` 由 lio_localization 发,带回环修正 |
+| Topic 迁移 | launch remap 集中表,LIO yaml 零修改;SCAN-Planner 仅改两行 yaml |
+| 定位初始位姿 | scan_context 粗定位 + KISS-ICP 精定位 |
+| 地图存储 | PCD(mapping 产出)+ `map_loader_node` 离线转 OctoMap |
+| 目标点 | InteractiveMarker 3D 点 + 朝向(发布 `/goal_pose`) |
+| Launch | 一份 `bringup_nav3d.launch.py` + `mode:=sim/real/bag` 切换 |
+| 全局规划 | 接口定,算法选型(jie_3d_nav vs OctoPlanner3D)留下一 spec |
+| GPS 因子 | 保留 SC-PGO 代码路径,默认 `gps_factor_enabled:=false`,未来半开放园区启用 |
+| 错误处理 | 全栈 STOP 协议(`/system/heartbeat`);`/initialpose` fallback;score < 阈值自动重定位 |
+
+**任务分解**:14 项任务,5 个里程碑(M1 mapping 跑通 → M2 localization 跑通 → M3 端到端 → M4 异常路径 → M5 实机)。详见 spec §13。
+
+**TF 树 / Topic 表**:见 spec §6 / §7。
 
 
 
