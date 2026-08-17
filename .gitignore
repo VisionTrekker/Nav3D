@@ -49,3 +49,7 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# superpowers design docs and tool state
+.superpowers/
+docs/superpowers/
