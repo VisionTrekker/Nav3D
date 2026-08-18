@@ -53,6 +53,10 @@ touch "$MARKER_FILE"
 
 # --- Resolve PACKAGE_ROOT_DIR (lio install/share/lio) ---
 LIO_PKG_DIR="$(ros2 pkg prefix lio)/share/lio"
+if [ -z "$LIO_PKG_DIR" ] || [ ! -d "$LIO_PKG_DIR" ]; then
+  echo "ERROR: lio package not found in ROS environment. Did colcon build succeed?" >&2
+  exit 1
+fi
 PCD_DIR="$LIO_PKG_DIR/PCD"
 
 # --- Static TF: vehicle -> livox_frame (Campus3 calibration: R_z(-90°)) ---
