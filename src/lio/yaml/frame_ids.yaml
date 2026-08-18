@@ -1,0 +1,7 @@
+# Frame ID mapping: Elevator-LIO internal -> nav3d public convention.
+# ROS 2 parameters loaded via --params-file in start_ros2.launch.py.
+# Used in src/node/publish.cpp as compile-time #define macros.
+frame_parent_id: "odom"
+frame_imu_id: "base_link"
+frame_body_id: "base_link"
+frame_lidar_id: "lidar_frame"
