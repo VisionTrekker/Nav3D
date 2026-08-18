@@ -1,0 +1,8 @@
+# 选择传感器、运行时和日志配置文件。
+# 路径相对于此 yaml/ 目录。三个文件不得包含重复的键；
+# Select one sensor, runtime and logging configuration.
+# Paths are relative to this yaml/ directory. The three files must not
+
+sensor_config: "sensors/mid360_bag.yaml"      # 传感器配置：雷达类型、外参、话题订阅（ Campus3 bag 回放）
+runtime_config: "runtime/mapping_bag.yaml"   # 运行时配置：体素降采样、ikd-tree、电梯检测（已禁用）、IESKF 估计器
+logging_config: "logging/default.yaml"   # 日志配置：控制台/文件日志开关、可视化选项
