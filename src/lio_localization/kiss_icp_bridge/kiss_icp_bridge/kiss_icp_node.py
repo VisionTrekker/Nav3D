@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from livox_ros_driver2.msg import CustomMsg
 from geometry_msgs.msg import PoseStamped
-import tf2_ros
+from std_msgs.msg import String
 import os
 
 from kiss_icp_bridge.voxels import VoxelMap
@@ -70,19 +70,22 @@ class KISSIcpBridge(Node):
         super().__init__("kiss_icp_node")
 
         self.declare_parameter("map_pcd_path", "/media/lenovo/disk/planner_ws/maps/campus3.pcd")
-        pcd_path = self.get_parameter("map_pcd_path").value
+        self.pcd_path_ = self.get_parameter("map_pcd_path").value
 
-        # Load map points from PCD (graceful missing-file handling)
-        try:
-            self.map_points_ = load_pcd_points(pcd_path)
-            self.get_logger().info(f"Loaded {len(self.map_points_)} map points from {pcd_path}")
-        except FileNotFoundError:
-            self.get_logger().error(f"Map PCD not found: {pcd_path} — will operate without prior map")
-            self.map_points_ = np.empty((0, 3), dtype=np.float32)
+        self.map_points_: np.ndarray = np.empty((0, 3), dtype=np.float32)
+        self.cloud_loaded_ = False
 
         self.voxel_map_ = VoxelMap(voxel_size=0.5)
 
-        # Subscriptions
+        # Subscription: scan context index (overrides map PCD path at runtime)
+        self.idx_sub_ = self.create_subscription(
+            String,
+            "/map_loader/scan_context_index",
+            self.on_scan_context_index,
+            10,
+        )
+
+        # Subscription: lidar frames
         self.lidar_sub_ = self.create_subscription(
             CustomMsg,
             "/livox/lidar",
@@ -90,7 +93,7 @@ class KISSIcpBridge(Node):
             10,
         )
 
-        # Publishers
+        # Publisher: fine-corrected pose
         self.pose_pub_ = self.create_publisher(
             PoseStamped,
             "/lio/localization/scan_to_map_pose",
@@ -99,8 +102,33 @@ class KISSIcpBridge(Node):
 
         self.get_logger().info("KISSIcpBridge node initialized")
 
-    def on_lidar(self, msg: CustomMsg):
-        # Extract XYZ from CustomMsg
+    def load_map_pcd(self) -> None:
+        """Load (or reload) the map PCD from the current pcd_path_."""
+        try:
+            self.map_points_ = load_pcd_points(self.pcd_path_)
+            self.get_logger().info(
+                f"Loaded {len(self.map_points_)} map points from {self.pcd_path_}"
+            )
+            self.cloud_loaded_ = True
+        except FileNotFoundError:
+            self.get_logger().error(
+                f"Map PCD not found: {self.pcd_path_} — will operate without prior map"
+            )
+            self.map_points_ = np.empty((0, 3), dtype=np.float32)
+            self.cloud_loaded_ = False
+
+    def on_scan_context_index(self, msg: String) -> None:
+        """Handle scan context index update — reload PCD if path changed."""
+        if msg.data and msg.data != self.pcd_path_:
+            self.get_logger().info(f"Updating map PCD path: {self.pcd_path_} -> {msg.data}")
+            self.pcd_path_ = msg.data
+            self.cloud_loaded_ = False
+
+    def on_lidar(self, msg: CustomMsg) -> None:
+        # Lazy-load PCD on first lidar frame
+        if not self.cloud_loaded_:
+            self.load_map_pcd()
+
         pts = np.array(
             [[p.x, p.y, p.z] for p in msg.points], dtype=np.float32
         )
