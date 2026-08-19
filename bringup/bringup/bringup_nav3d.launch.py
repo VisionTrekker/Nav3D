@@ -3,7 +3,7 @@ from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.actions import ExecuteProcess, TimerAction
 from launch_ros.actions import Node
 from launch.conditions import IfCondition
-from launch_helpers import lio_mapping_remaps, lio_localization_remaps, driver_remaps
+from bringup.launch_helpers import lio_mapping_remaps, lio_localization_remaps, driver_remaps
 
 
 def generate_launch_description():
@@ -12,6 +12,7 @@ def generate_launch_description():
     bag_path = LaunchConfiguration('bag_path')
     use_loc = LaunchConfiguration('use_localization')
     gps_factor_enabled = LaunchConfiguration('gps_factor_enabled')
+    map_arg = LaunchConfiguration('map')
 
     return LaunchDescription([
         DeclareLaunchArgument('mode', default_value='bag',
@@ -25,6 +26,9 @@ def generate_launch_description():
                              description='Run lio_localization (true) or lio_mapping (false)'),
         DeclareLaunchArgument('gps_factor_enabled', default_value='false',
                              description='Enable GPS factor'),
+        DeclareLaunchArgument('map',
+                             default_value='/media/lenovo/disk/planner_ws/maps/campus3.pcd',
+                             description='Path to PCD map file'),
 
         # Rosbag replay when mode==bag
         ExecuteProcess(
@@ -90,6 +94,7 @@ def generate_launch_description():
             executable='map_loader_node',
             name='map_loader_node',
             output='screen',
+            parameters=[{'pcd_path': map_arg}],
         ),
 
         # Goal marker server
