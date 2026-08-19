@@ -52,6 +52,17 @@ def generate_launch_description():
             output='screen',
         ),
 
+        # unitree_go2w driver (onboard-OrinNX ONLY; package absent from dev tree,
+        # resolves on the real machine). Runs only in mode:=real.
+        Node(
+            package='unitree_go2w',
+            executable='driver',
+            name='unitree_driver',
+            output='screen',
+            condition=IfCondition(PythonExpression(["'", mode, "' == 'real'"])),
+            remappings=driver_remaps(),
+        ),
+
         # LIO mapping (use_localization == false)
         Node(
             package='lio_backup',
