@@ -2,6 +2,10 @@ scan_planner_node:
   ros__parameters:
     use_sim_time: false
 
+    # Topic remapping for Nav3D integration
+    input_topic: "/global_planner/path"
+    output_topic: "/local_planner/cmd_vel"
+
     fsm.navi_mode: 1
     fsm.thresh_replan: 1.0
     fsm.thresh_no_replan: 0.1
