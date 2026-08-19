@@ -81,10 +81,9 @@ private:
 
   void onFeedback(const visualization_msgs::msg::InteractiveMarkerFeedback::ConstSharedPtr & feedback)
   {
-    // POSE_UPDATE — user dragged the marker
     if (feedback->event_type == visualization_msgs::msg::InteractiveMarkerFeedback::POSE_UPDATE) {
       current_pose_ = feedback->pose;
-      // Don't publish on drag — only on explicit "Set Goal"
+      publishGoalPose(feedback->pose);
     }
   }
 
