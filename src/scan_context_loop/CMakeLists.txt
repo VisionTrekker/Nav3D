@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.16)
+project(scan_context_loop LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(PCL REQUIRED)
+find_package(Eigen3 REQUIRED)
+add_library(sc_manager_lib STATIC src/SCManager.cpp)
+target_include_directories(sc_manager_lib PUBLIC
+  include
+  ${PCL_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
+)
+ament_target_dependencies(sc_manager_lib rclcpp nav_msgs sensor_msgs geometry_msgs pcl_conversions PCL Eigen3)
+add_executable(scan_context_loop_node src/scan_context_loop_node.cpp)
+target_link_libraries(scan_context_loop_node sc_manager_lib)
+ament_target_dependencies(scan_context_loop_node rclcpp nav_msgs sensor_msgs geometry_msgs pcl_conversions PCL Eigen3)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_scan_context test/test_scan_context.cpp)
+  target_link_libraries(test_scan_context sc_manager_lib)
+endif()
+install(TARGETS scan_context_loop_node DESTINATION lib/${PROJECT_NAME})
+ament_package()

@@ -15,7 +15,6 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <cv_bridge/cv_bridge.h>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -69,7 +68,9 @@ public:
 
     // User-side API
     void makeAndSaveScancontextAndKeys( pcl::PointCloud<SCPointType> & _scan_down );
-    std::pair<int, float> detectLoopClosureID( void ); // int: nearest node index, float: relative yaw  
+    std::pair<int, float> detectLoopClosureID( void ); // int: nearest node index, float: relative yaw
+    // Overload for node/test use: args-out style
+    void detectLoopClosureID( int _query_index, int& _loop_id, float& _yaw_diff );
 
     // for ltslam 
     // User-side API for multi-session
@@ -77,6 +78,7 @@ public:
     std::pair<int, float> detectLoopClosureIDBetweenSession ( std::vector<float>& curr_key,  Eigen::MatrixXd& curr_desc);
 
     const Eigen::MatrixXd& getConstRefRecentSCD(void);
+    int polarcontextsSize(void) const { return static_cast<int>(polarcontexts_.size()); }
 
 public:
     // hyper parameters ()
