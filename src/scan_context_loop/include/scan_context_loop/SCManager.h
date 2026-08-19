@@ -21,8 +21,8 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-#include "scancontext/nanoflann.hpp"
-#include "scancontext/KDTreeVectorOfVectorsAdaptor.h"
+#include "nanoflann.hpp"
+#include "KDTreeVectorOfVectorsAdaptor.h"
 #include "aloam_velodyne/tic_toc.h"
 
 using namespace Eigen;

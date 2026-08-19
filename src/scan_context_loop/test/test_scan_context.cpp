@@ -9,8 +9,12 @@ TEST(SCManager, MakeAndDetectReturnsValidLoopID) {
     pcl::PointXYZI p; p.x = i*0.01f; p.y = 0; p.z = 0; p.intensity = 100;
     cloud.push_back(p);
   }
-  sc.makeAndSaveScancontextAndKeys(cloud);
+  // Insert 31+ identical scans so the loop detector has enough history
+  // to bypass its NUM_EXCLUDE_RECENT guard and exercise the detection path.
+  for (int i = 0; i < 35; ++i) {
+    sc.makeAndSaveScancontextAndKeys(cloud);
+  }
   int loop_id = -1; float yaw_diff = 0;
-  sc.detectLoopClosureID(0, loop_id, yaw_diff);
+  sc.detectLoopClosureID(34, loop_id, yaw_diff);
   EXPECT_GE(loop_id, 0);
 }
