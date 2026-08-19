@@ -1,0 +1,14 @@
+# Placeholder rviz config - replace with actual config
+Panels:
+  - Class: rviz_common/Displays
+    Help visibility: false
+    Name: Displays
+    Tree items:
+      []
+Visualization Manager:
+  Class: ""
+  Displays: []
+  Fixed Frame: map
+  Name: root
+  Tools:
+    - Class: rviz_common/Interact
