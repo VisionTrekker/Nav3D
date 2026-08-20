@@ -1,0 +1,6 @@
+string pcd_path
+float32 resolution
+---
+bool success
+string octomap_path
+string scan_context_index_path

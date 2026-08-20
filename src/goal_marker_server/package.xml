@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd"?>
+<package format="3">
+  <name>goal_marker_server</name>
+  <version>0.1.0</version>
+  <description>InteractiveMarker 3D goal pose publisher for RViz</description>
+  <maintainer email="nav3d@example.com">Nav3D</maintainer>
+  <license>BSD</license>
+  <depend>rclcpp</depend>
+  <depend>visualization_msgs</depend>
+  <depend>interactive_markers</depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
