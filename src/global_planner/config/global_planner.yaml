@@ -1,0 +1,7 @@
+global_planner_node:
+  ros__parameters:
+    # Stage 2 validation map. Keep this configurable here or from launch args;
+    # do not hardcode project-specific PCD paths in C++.
+    pcd_map_file: "/home/nhy/code/vscode/maps/zhiyuan_rev.pcd"
+    octomap_output_bt: "/tmp/nav3d_global_planner_zhiyuan_rev.bt"
+    max_endpoint_snap_distance: 2.5

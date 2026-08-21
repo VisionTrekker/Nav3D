@@ -1,0 +1,26 @@
+planning:
+  global:
+    pcd_map_file: "/home/nhy/code/vscode/maps/zhiyuan_rev.pcd"
+    octomap_output_bt: "/tmp/nav3d_global_planner_zhiyuan_rev.bt"
+    max_endpoint_snap_distance: 2.5
+
+  topics:
+    goal_pose: "/goal_pose"
+    odom: "/lio/localization/odom"
+    sensor_pose: "/lio/localization/odom_imu"
+    cloud: "/lio/mapping/clouds_lidar"
+    global_path: "/global_planner/path"
+    bspline: "/planning/bspline"
+    cmd_vel: "/local_planner/cmd_vel"
+    stop_requested: "/planning/stop_requested"
+
+  scan:
+    frame_id: "map"
+    navi_mode: 3
+    sensor_type: "lidar"
+    cloud_is_world: true
+    need_extrinsic: false
+    body_height: 0.0
+
+  safety:
+    path_timeout_sec: 3.0

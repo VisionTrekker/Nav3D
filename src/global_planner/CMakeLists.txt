@@ -16,12 +16,28 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(octomap REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common io)
 
-add_executable(global_planner_node src/global_planner_node.cpp)
+add_executable(global_planner_node
+    src/global_planner_node.cpp
+    src/global_planner.cpp
+    src/pcd2octomap_converter.cpp
+)
+target_include_directories(global_planner_node
+    PRIVATE
+        include
+        ${PCL_INCLUDE_DIRS}
+        ${OCTOMAP_INCLUDE_DIRS}
+)
 ament_target_dependencies(global_planner_node
     rclcpp
     geometry_msgs
     nav_msgs
+)
+target_link_libraries(global_planner_node
+    ${PCL_LIBRARIES}
+    ${OCTOMAP_LIBRARIES}
 )
 
 install(TARGETS global_planner_node
@@ -30,6 +46,6 @@ install(TARGETS global_planner_node
     RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 
 ament_package()

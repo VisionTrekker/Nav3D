@@ -19,6 +19,7 @@
   <depend>rclpy</depend>
   <depend>scan_planner_msgs</depend>
   <depend>sensor_msgs</depend>
+  <exec_depend>sensor_msgs_py</exec_depend>
   <depend>std_msgs</depend>
   <depend>tf2</depend>
   <depend>tf2_geometry_msgs</depend>
@@ -27,6 +28,7 @@
   <depend>visualization_msgs</depend>
 
   <exec_depend>go2_description</exec_depend>
+  <exec_depend>global_planner</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>local_sensing_node</exec_depend>

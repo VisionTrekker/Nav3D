@@ -56,6 +56,8 @@ install(FILES launch/default.rviz DESTINATION share/${PROJECT_NAME}/rviz OPTIONA
 install(PROGRAMS
   scripts/keypoint_recorder.py
   scripts/reference_path_publisher.py
+  scripts/global_to_scan_mock_io.py
+  scripts/scan_mode3_mock_io.py
   DESTINATION lib/${PROJECT_NAME} OPTIONAL)
 
 if(BUILD_TESTING)

@@ -12,7 +12,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "pcd_map_file",
             default_value="/home/nhy/code/vscode/maps/zhiyuan_rev.pcd",
-            description="Existing project PCD map for global planner validation",
+            description="Existing project PCD map for Stage 2 global_planner validation",
         ),
         DeclareLaunchArgument(
             "octomap_output_bt",
@@ -20,10 +20,10 @@ def generate_launch_description():
             description="Temporary OctoMap .bt output generated from the PCD map",
         ),
         Node(
-            package='global_planner',
-            executable='global_planner_node',
-            name='global_planner_node',
-            output='screen',
+            package="global_planner",
+            executable="global_planner_node",
+            name="global_planner_node",
+            output="screen",
             parameters=[{
                 "pcd_map_file": pcd_map_file,
                 "octomap_output_bt": octomap_output_bt,

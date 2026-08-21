@@ -37,6 +37,9 @@ public:
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
         "body_pose", rclcpp::SensorDataQoS(),
         std::bind(&ClosedLoopController::odomCallback, this, std::placeholders::_1));
+    stop_sub_ = create_subscription<std_msgs::msg::Bool>(
+        "planning/stop_requested", 10,
+        std::bind(&ClosedLoopController::stopCallback, this, std::placeholders::_1));
     cmd_vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 20);
     execution_frozen_pub_ = create_publisher<std_msgs::msg::Bool>("planning/go2_execution_frozen", 10);
     cmd_timer_ = create_wall_timer(std::chrono::milliseconds(10),
@@ -110,6 +113,26 @@ private:
                 static_cast<long long>(traj_id_), traj_duration_);
   }
 
+  void stopCallback(const std_msgs::msg::Bool::ConstSharedPtr msg)
+  {
+    if (!msg) return;
+    if (msg->data)
+    {
+      receive_traj_ = false;
+      stop_requested_ = true;
+      exec_time_ = 0.0;
+      publishExecutionFrozen(true);
+      publishStop();
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 1000,
+          "Planning stop requested; clearing active trajectory");
+    }
+    else
+    {
+      stop_requested_ = false;
+    }
+  }
+
   void odomCallback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
   {
     odom_pos_ << msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z;
@@ -119,6 +142,13 @@ private:
 
   void cmdCallback()
   {
+    if (stop_requested_)
+    {
+      publishExecutionFrozen(true);
+      publishStop();
+      return;
+    }
+
     if (!receive_traj_ || !have_odom_)
     {
       publishExecutionFrozen(false);
@@ -164,9 +194,11 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr execution_frozen_pub_;
   rclcpp::Subscription<scan_planner_msgs::msg::Bspline>::SharedPtr bspline_sub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr stop_sub_;
   rclcpp::TimerBase::SharedPtr cmd_timer_;
   bool receive_traj_{false};
   bool have_odom_{false};
+  bool stop_requested_{false};
   std::vector<UniformBspline> traj_;
   double traj_duration_{0.0};
   std::int64_t traj_id_{0};
