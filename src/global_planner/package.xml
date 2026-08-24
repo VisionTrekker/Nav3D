@@ -3,7 +3,7 @@
 <package format="3">
   <name>global_planner</name>
   <version>0.1.0</version>
-  <description>Global path planner stub — straight-line path from current pose to goal.</description>
+  <description>ROS2 adapter for the OctoPlanner3D global path planner.</description>
   <maintainer email="xiaofan0100@sjtu.edu.cn">Yifan Zhang</maintainer>
   <license>GPL-2.0-or-later</license>
 
@@ -12,6 +12,7 @@
   <depend condition="$ROS_VERSION == 2">rclcpp</depend>
   <depend condition="$ROS_VERSION == 2">geometry_msgs</depend>
   <depend condition="$ROS_VERSION == 2">nav_msgs</depend>
+  <depend>octomap</depend>
 
   <export>
     <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
