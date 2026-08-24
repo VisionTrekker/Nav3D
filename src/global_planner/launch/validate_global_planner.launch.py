@@ -11,7 +11,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "pcd_map_file",
-            default_value="/home/nhy/code/vscode/maps/zhiyuan_rev.pcd",
+            default_value="maps/zhiyuan_rev.pcd",
             description="Existing project PCD map for Stage 2 global_planner validation",
         ),
         DeclareLaunchArgument(

@@ -1,6 +1,6 @@
 planning:
   global:
-    pcd_map_file: "/home/nhy/code/vscode/maps/zhiyuan_rev.pcd"
+    pcd_map_file: "maps/zhiyuan_rev.pcd"
     octomap_output_bt: "/tmp/nav3d_global_planner_zhiyuan_rev.bt"
     max_endpoint_snap_distance: 2.5
 

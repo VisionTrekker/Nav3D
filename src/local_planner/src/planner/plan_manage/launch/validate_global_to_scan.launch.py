@@ -29,7 +29,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "pcd_map_file",
-            default_value="/home/nhy/code/vscode/maps/zhiyuan_rev.pcd",
+            default_value="maps/zhiyuan_rev.pcd",
         ),
         DeclareLaunchArgument(
             "octomap_output_bt",

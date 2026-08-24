@@ -17,7 +17,7 @@
 namespace
 {
 constexpr const char * kMapFrame = "map";
-constexpr const char * kDefaultPcdMap = "/home/nhy/code/vscode/maps/zhiyuan_rev.pcd";
+constexpr const char * kDefaultPcdMap = "maps/zhiyuan_rev.pcd";
 constexpr const char * kDefaultBtOutput = "/tmp/nav3d_global_planner_zhiyuan_rev.bt";
 constexpr double kDefaultMaxEndpointSnapDistance = 2.5;
 }  // namespace
