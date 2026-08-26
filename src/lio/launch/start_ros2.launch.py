@@ -7,17 +7,19 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 import os
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
-    package_share = FindPackageShare("lio")
+    # Use ament_index for synchronous absolute path (Humble's
+    # FindPackageShare.perform() requires a LaunchContext, which is
+    # unavailable at description-build time).
+    package_share = get_package_share_directory("lio")
     config_path = LaunchConfiguration("config_path")
     use_rviz = LaunchConfiguration("use_rviz")
 
     # Load frame_ids.yaml params — must be an absolute path for --params-file
-    frame_ids_yaml = os.path.join(
-        package_share.perform(), "yaml", "frame_ids.yaml"
-    )
+    frame_ids_yaml = os.path.join(package_share, "yaml", "frame_ids.yaml")
 
     return LaunchDescription([
         DeclareLaunchArgument("config_path", default_value="root_config.yaml"),
@@ -35,7 +37,7 @@ def generate_launch_description():
             executable="rviz2",
             name="rviz2",
             output="screen",
-            arguments=["-d", PathJoinSubstitution([package_share, "rviz", "LIO_ros2.rviz"])],
+            arguments=["-d", PathJoinSubstitution([FindPackageShare("lio"), "rviz", "LIO_ros2.rviz"])],
             condition=IfCondition(use_rviz),
         ),
     ])

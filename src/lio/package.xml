@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>lio_backup</name>
+  <name>lio</name>
   <version>0.1.0</version>
   <description>LiDAR-inertial odometry for continuous localization through elevator motion.</description>
   <maintainer email="xiaofan0100@sjtu.edu.cn">Yifan Zhang</maintainer>

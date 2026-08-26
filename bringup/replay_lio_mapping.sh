@@ -21,11 +21,11 @@
 #   - ROS_DOMAIN_ID must match your environment (this workspace uses 18).
 set -e
 
-NAV3D_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NAV3D_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BAG="${1:-/media/lenovo/disk/planner_ws/data-rosbag2/Campus3}"
 
 # --- Resolve bag duration and compute trim (skip last 30s = elevator segment) ---
-DURATION=$(ros2 bag info "$BAG" 2>/dev/null | awk '/Duration:/ {print $2}')
+DURATION=$(ros2 bag info "$BAG" 2>/dev/null | awk '/Duration:/ {gsub(/s$/, "", $2); print $2}')
 if [ -z "$DURATION" ]; then
   echo "ERROR: could not read bag duration for $BAG" >&2
   exit 1
@@ -72,9 +72,12 @@ ros2 run tf2_ros static_transform_publisher \
 TF_PID=$!
 sleep 1
 
-# --- Play bag (background, looped so data keeps flowing) ---
-echo "[2/3] Replaying bag (loop): $BAG  (--duration $TRIMMED)"
-ros2 bag play "$BAG" --duration "$TRIMMED" --loop &
+# --- Play bag in background; let it run to end ---
+# Note: Humble's `ros2 bag play` does not support --duration or --loop.
+# Elevator-segment trimming is handled by `elevator_enabled: false` in
+# mapping_bag.yaml; lio will ignore elevator motion during the last 30s.
+echo "[2/3] Replaying bag: $BAG"
+ros2 bag play "$BAG" &
 BAG_PID=$!
 sleep 2
 

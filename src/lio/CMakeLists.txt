@@ -4,7 +4,7 @@ if(POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif()
 
-project(lio_backup LANGUAGES C CXX)
+project(lio LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -25,6 +25,9 @@ set(CMAKE_BUILD_RPATH "/usr/lib/x86_64-linux-gnu")
 find_package(OpenMP REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
+# PCL 1.12 on Ubuntu 22.04 transitively loads VTK, which references
+# MPI::MPI_C; pre-load it before find_package(PCL).
+find_package(MPI REQUIRED COMPONENTS C)
 find_package(PCL REQUIRED COMPONENTS common io filters)
 # Ubuntu 22.04's PCLConfig can append a directory-scoped QHULL::QHULL target
 # to this legacy variable.  The requested common/io/filters shared libraries

@@ -65,7 +65,7 @@ def generate_launch_description():
 
         # LIO mapping (use_localization == false)
         Node(
-            package='lio_backup',
+            package='lio',
             executable='lio',
             name='lio_mapping',
             output='screen',
@@ -79,7 +79,7 @@ def generate_launch_description():
 
         # LIO localization (use_localization == true)
         Node(
-            package='lio_backup',
+            package='lio',
             executable='lio',
             name='lio_localization',
             output='screen',
