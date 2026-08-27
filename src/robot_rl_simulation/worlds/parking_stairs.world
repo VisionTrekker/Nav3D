@@ -1,0 +1,7 @@
+# Placeholder until the parking-stairs asset passes the license gate.
+<sdf version="1.6">
+  <world name="parking_stairs">
+    <include><uri>model://sun</uri></include>
+    <include><uri>model://ground_plane</uri></include>
+  </world>
+</sdf>

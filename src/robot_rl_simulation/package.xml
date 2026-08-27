@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robot_rl_simulation</name>
+  <version>0.1.0</version>
+  <description>Foundation package for the Nav3D A1 Gazebo Classic and RL control integration.</description>
+  <maintainer email="xiaofan0100@sjtu.edu.cn">Nav3D maintainers</maintainer>
+  <license>GPL-2.0-or-later</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>effort_controllers</exec_depend>
+  <exec_depend>gazebo_ros</exec_depend>
+  <exec_depend>gazebo_ros2_control</exec_depend>
+  <depend>nav_msgs</depend>
+  <depend>rclcpp</depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export><build_type>ament_cmake</build_type></export>
+</package>

@@ -1,0 +1,12 @@
+policy_rate_hz: 50.0
+body_state_rate_hz: 100.0
+effort_publish_rate_hz: 100.0
+controller_manager_rate_hz: 500.0
+kp: 80.0
+kd: 1.0
+action_scale: 0.25
+history_frames: 5
+observation_size: 225
+action_size: 12
+cmd_vel_timeout_sec: 0.5
+localization_timeout_sec: 0.5

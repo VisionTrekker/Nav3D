@@ -1,0 +1,5 @@
+<sdf version="1.6">
+  <model name="parking_stairs">
+    <static>true</static>
+  </model>
+</sdf>

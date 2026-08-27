@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <gazebo>
+    <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
+      <parameters>$(find robot_rl_simulation)/description/a1/config/controllers.yaml</parameters>
+    </plugin>
+    <plugin name="a1_body_state" filename="liba1_body_state_plugin.so">
+      <topic_name>/simulation/a1/body_state</topic_name>
+      <publish_rate_hz>100.0</publish_rate_hz>
+    </plugin>
+  </gazebo>
+</robot>
