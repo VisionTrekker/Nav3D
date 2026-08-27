@@ -25,7 +25,7 @@
 
 The parking-stairs geometry is copied from the authorized local reference asset:
 
-- Source: `/media/lenovo/disk/planner_ws/Ref_proj_tmp/1_Building/Building.dae`
+- Source: authorized local reference asset `1_Building/Building.dae`
 - SHA-256: `2b297b58fd4352d87b005b5ce1e0ce98119083be6805b1b25c4478f075c63bd9`
 - Target: `models/parking_stairs/meshes/parking_stairs.dae`
 - Redistribution status: authorized by the project owner for this Nav3D workspace.
