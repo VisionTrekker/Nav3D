@@ -1,3 +1,5 @@
+policy_device: cuda_preferred
+allow_cpu_fallback: true
 policy_rate_hz: 50.0
 body_state_rate_hz: 100.0
 effort_publish_rate_hz: 100.0
