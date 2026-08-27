@@ -16,5 +16,5 @@ RL_hip_joint RL_thigh_joint RL_calf_joint
 
 Each joint has an URDF effort limit of 33.5 N·m. The eventual RL adapter must
 parse and enforce those URDF limits; `controllers.yaml` only forwards effort.
-The Gazebo launch remains unavailable until the policy and parking-stairs asset
-receive explicit redistribution permission.
+The Gazebo launch remains unavailable until `rl_locomotion_a1` and the
+Gazebo spawn/control launch graph are implemented.

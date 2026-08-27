@@ -11,18 +11,24 @@
 - This package will preserve the upstream license in the copied description
   directory before distributing those assets.
 
-## Policy weights — BLOCKED
+## Policy weights
 
-`policy_act_inference_stair.pt` was found at the reference repository, commit
-`b6c48fd9141e2e6d456d0890a5c139206c1d534c`, SHA-256
-`2d5aa72511c0c6609c02f4105845eee6974d3d73431497f8f35306da9588fe14`.
-It has no independent license or provenance statement. Do not copy or distribute
-it until the rights holder grants written permission and the model provenance
-and redistribution scope are recorded.
+`policy_act_inference_stair.pt` is copied from the authorized reference source:
 
-## Parking-stairs asset — BLOCKED
+- Source repository: `https://github.com/Robot-Nav/legbot_3D_Nav`
+- Source commit: `b6c48fd9141e2e6d456d0890a5c139206c1d534c`
+- SHA-256: `2d5aa72511c0c6609c02f4105845eee6974d3d73431497f8f35306da9588fe14`
+- Target: `policies/a1/policy_act_inference_stair.pt`
+- Redistribution status: authorized by the project owner for this Nav3D workspace.
 
-The local `1_Building` asset has no license, author, or provenance metadata and
-contains an absolute path. Do not copy or distribute it until ownership and
-permission are confirmed. `GazeboQuadbot` was not found at the previously
-specified path during the audit, so no component was copied from it.
+## Parking-stairs asset
+
+The parking-stairs geometry is copied from the authorized local reference asset:
+
+- Source: `/media/lenovo/disk/planner_ws/Ref_proj_tmp/1_Building/Building.dae`
+- SHA-256: `2b297b58fd4352d87b005b5ce1e0ce98119083be6805b1b25c4478f075c63bd9`
+- Target: `models/parking_stairs/meshes/parking_stairs.dae`
+- Redistribution status: authorized by the project owner for this Nav3D workspace.
+
+The model and world paths are normalized to package-relative Gazebo `model://`
+URIs; the original external absolute paths are not used at runtime.

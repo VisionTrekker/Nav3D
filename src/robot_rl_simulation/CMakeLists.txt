@@ -24,7 +24,7 @@ target_include_directories(robot_rl_simulation_logic INTERFACE include)
 install(TARGETS a1_body_state_plugin
   LIBRARY DESTINATION lib)
 
-install(DIRECTORY include config launch worlds models description
+install(DIRECTORY include config launch worlds models description policies
   DESTINATION share/${PROJECT_NAME}
   PATTERN "__pycache__" EXCLUDE
   PATTERN "*.pyc" EXCLUDE)

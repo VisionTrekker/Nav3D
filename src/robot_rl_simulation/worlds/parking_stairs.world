@@ -1,7 +1,13 @@
-# Placeholder until the parking-stairs asset passes the license gate.
+<?xml version="1.0" ?>
 <sdf version="1.6">
   <world name="parking_stairs">
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <gravity>0 0 -9.81</gravity>
+    </physics>
     <include><uri>model://sun</uri></include>
     <include><uri>model://ground_plane</uri></include>
+    <include><uri>model://parking_stairs</uri></include>
   </world>
 </sdf>

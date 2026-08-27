@@ -1,5 +1,24 @@
+<?xml version="1.0"?>
 <sdf version="1.6">
   <model name="parking_stairs">
     <static>true</static>
+    <link name="building">
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://parking_stairs/meshes/parking_stairs.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://parking_stairs/meshes/parking_stairs.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
   </model>
 </sdf>

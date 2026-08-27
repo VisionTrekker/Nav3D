@@ -5,9 +5,10 @@ A1 Gazebo Classic simulation package for the Nav3D RL execution layer.
 ## Current status
 
 This package currently contains the ROS 2 package boundary, A1 ROS 2 control
-description, body-state plugin, and pure safety-filter logic test. The
-TorchScript policy and runnable simulation launch remain unavailable while the
-model and parking-stairs asset are blocked by their redistribution status.
+description, body-state plugin, authorized policy and parking-stairs resources,
+and pure safety-filter logic test. The runnable simulation launch remains
+unavailable until `rl_locomotion_a1` and the Gazebo spawn/control launch graph
+are implemented.
 
 When the policy runtime is added, it will try CUDA first and fall back to CPU
 only if CUDA is unavailable or initialization/inference fails. The active

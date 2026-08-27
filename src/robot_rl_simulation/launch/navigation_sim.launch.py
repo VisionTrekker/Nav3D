@@ -3,8 +3,8 @@ from launch.actions import DeclareLaunchArgument, LogInfo
 
 
 NOT_READY_MESSAGE = (
-    "navigation_sim is unavailable: the parking-stairs geometry and TorchScript policy "
-    "remain blocked pending explicit third-party redistribution permission."
+    "navigation_sim resources are installed, but rl_locomotion_a1 and the Gazebo "
+    "spawn/control launch graph have not been implemented yet."
 )
 
 
