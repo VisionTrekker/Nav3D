@@ -6,6 +6,8 @@
   <maintainer email="xiaofan0100@sjtu.edu.cn">Nav3D maintainers</maintainer>
   <license>GPL-2.0-or-later</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <build_depend>gazebo</build_depend>
+  <build_depend>gazebo_ros</build_depend>
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>effort_controllers</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>
