@@ -13,6 +13,7 @@ namespace robot_rl_simulation {
 
 class A1BodyStatePlugin final : public gazebo::ModelPlugin {
  public:
+  ~A1BodyStatePlugin() override;
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override;
 
  private:
