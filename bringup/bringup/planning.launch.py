@@ -1,13 +1,84 @@
 """Formal Nav3D planning subsystem launch."""
 
+import math
 import os
 
 import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
+from launch import logging as launch_logging
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+
+_LOGGER = launch_logging.get_logger("nav3d.planning")
+_RESOLUTION_TOLERANCE = 1.0e-6
+
+
+def _check_geometry_parameters(global_cfg, bringup_share, scan_share):
+    """Report map-resolution mismatches without changing launch behavior."""
+    if "octomap_resolution" not in global_cfg:
+        raise ValueError("planning.global.octomap_resolution is required")
+
+    octomap_resolution = float(global_cfg["octomap_resolution"])
+    if not math.isfinite(octomap_resolution) or octomap_resolution <= 0.0:
+        raise ValueError("planning.global.octomap_resolution must be positive")
+
+    icp_yaml_path = os.path.join(bringup_share, "config", "localization_icp.yaml")
+    icp_voxel_size = None
+    try:
+        with open(icp_yaml_path, "r", encoding="utf-8") as stream:
+            icp_config = yaml.safe_load(stream) or {}
+        icp_voxel_size = float(
+            icp_config["fixed_map_icp"]["ros__parameters"]["voxel_size"])
+        if not math.isfinite(icp_voxel_size) or icp_voxel_size <= 0.0:
+            raise ValueError("fixed_map_icp.voxel_size must be positive")
+    except (KeyError, TypeError, ValueError, OSError, yaml.YAMLError) as exc:
+        _LOGGER.warning(f"Could not validate fixed-map ICP voxel_size: {exc}")
+
+    scan_yaml_path = os.path.join(scan_share, "config", "planner.yaml")
+    scan_resolution = None
+    try:
+        with open(scan_yaml_path, "r", encoding="utf-8") as stream:
+            scan_config = yaml.safe_load(stream) or {}
+        scan_resolution = float(
+            scan_config["scan_planner_node"]["ros__parameters"]["grid_map.resolution"])
+        if not math.isfinite(scan_resolution) or scan_resolution <= 0.0:
+            raise ValueError("grid_map.resolution must be positive")
+    except (KeyError, TypeError, ValueError, OSError, yaml.YAMLError) as exc:
+        _LOGGER.warning(f"Could not validate SCAN grid_map.resolution: {exc}")
+
+    icp_label = f"{icp_voxel_size:.3f} m" if icp_voxel_size is not None else "unknown"
+    scan_label = f"{scan_resolution:.3f} m" if scan_resolution is not None else "unknown"
+    _LOGGER.info(
+        "Map geometry parameters: "
+        f"map_loader/global OctoMap={octomap_resolution:.3f} m, "
+        f"fixed_map_icp voxel_size={icp_label}, SCAN local grid={scan_label}")
+
+    if icp_voxel_size is not None:
+        if math.isclose(
+            octomap_resolution,
+            icp_voxel_size,
+            rel_tol=0.0,
+            abs_tol=_RESOLUTION_TOLERANCE,
+        ):
+            _LOGGER.info(
+                "Map geometry consistency PASS: Global OctoMap and fixed-map ICP "
+                "use the same resolution")
+        else:
+            _LOGGER.warning(
+                "Map geometry consistency WARNING: Global/MapLoader OctoMap "
+                f"resolution={octomap_resolution:.3f} m differs from fixed-map ICP "
+                f"voxel_size={icp_voxel_size:.3f} m")
+
+    if scan_resolution is not None:
+        _LOGGER.info(
+            "SCAN grid resolution is checked independently: "
+            f"{scan_resolution:.3f} m; it is intentionally allowed to be "
+            "finer than the global map")
+
+    return octomap_resolution
 
 
 def _setup(context):
@@ -27,6 +98,8 @@ def _setup(context):
     pcd_map_file = pcd_map_override or global_cfg["pcd_map_file"]
     planner_yaml = os.path.join(scan_share, "config", "planner.yaml")
     controllers_yaml = os.path.join(scan_share, "config", "controllers.yaml")
+    expected_octomap_resolution = _check_geometry_parameters(
+        global_cfg, bringup_share, scan_share)
     global_planner_param_keys = [
         "robot_radius",
         "max_iterations",
@@ -90,9 +163,11 @@ def _setup(context):
                 "pcd_map_file": pcd_map_file,
                 "octomap_output_bt": global_cfg["octomap_output_bt"],
                 "max_endpoint_snap_distance": float(global_cfg["max_endpoint_snap_distance"]),
+                "expected_octomap_resolution": expected_octomap_resolution,
                 "use_octomap_topic": True,
                 "octomap_topic": topics["octomap"],
                 "odom_topic": topics["odom"],
+                "require_map_frame_odom": topics["odom"] == "/lio/localization/odom",
                 "goal_topic": topics["goal_pose"],
                 "path_topic": topics["global_path"],
             }, global_planner_overrides],

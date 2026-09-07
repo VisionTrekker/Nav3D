@@ -3,7 +3,11 @@ from pathlib import Path
 import numpy as np
 
 from lio_localization.fixed_map_registration import FixedMapRegistration
-from lio_localization.localization_composer import _inverse_se3
+from lio_localization.localization_composer import (
+    _inverse_se3,
+    _planar_map_to_odom,
+    _yaw_from_rotation,
+)
 from lio_localization.pcd_io import load_pcd_xyz
 
 
@@ -39,6 +43,26 @@ def _transform(translation, yaw_degrees=0.0) -> np.ndarray:
         [sine, cosine, 0.0],
         [0.0, 0.0, 1.0],
     ]
+    result[:3, 3] = translation
+    return result
+
+
+def _rpy_transform(translation, roll_degrees, pitch_degrees, yaw_degrees):
+    roll, pitch, yaw = np.deg2rad(
+        [roll_degrees, pitch_degrees, yaw_degrees])
+    rx = np.array([
+        [1.0, 0.0, 0.0],
+        [0.0, np.cos(roll), -np.sin(roll)],
+        [0.0, np.sin(roll), np.cos(roll)],
+    ])
+    ry = np.array([
+        [np.cos(pitch), 0.0, np.sin(pitch)],
+        [0.0, 1.0, 0.0],
+        [-np.sin(pitch), 0.0, np.cos(pitch)],
+    ])
+    rz = _transform([0.0, 0.0, 0.0], np.rad2deg(yaw))[:3, :3]
+    result = np.eye(4)
+    result[:3, :3] = rz @ ry @ rx
     result[:3, 3] = translation
     return result
 
@@ -102,6 +126,49 @@ def test_composer_correction_chain_is_full_se3():
     recomposed = map_to_odom @ odom_to_base
 
     assert np.allclose(recomposed, corrected_map_to_base, atol=1.0e-12)
+
+
+def test_planar_initial_alignment_does_not_tilt_map_to_odom():
+    odom_to_base = _rpy_transform(
+        [-0.82, 2.89, 0.92],
+        roll_degrees=0.8,
+        pitch_degrees=-23.4,
+        yaw_degrees=-91.2,
+    )
+    map_to_base = _transform([-0.82, 2.89, 0.92], yaw_degrees=-91.2)
+
+    map_to_odom = _planar_map_to_odom(map_to_base, odom_to_base)
+    recomposed = map_to_odom @ odom_to_base
+
+    assert np.allclose(recomposed[:3, 3], map_to_base[:3, 3], atol=1.0e-12)
+    assert np.isclose(
+        _yaw_from_rotation(recomposed[:3, :3]),
+        _yaw_from_rotation(map_to_base[:3, :3]),
+        atol=1.0e-12,
+    )
+    assert np.allclose(map_to_odom[:3, 2], [0.0, 0.0, 1.0], atol=1.0e-12)
+
+
+def test_planar_pose_correction_alignment_does_not_tilt_map_to_odom():
+    odom_to_base = _rpy_transform(
+        [2.3, -1.4, 0.7],
+        roll_degrees=1.2,
+        pitch_degrees=-18.0,
+        yaw_degrees=47.0,
+    )
+    corrected_map_to_base = _transform([6.4, -1.3, 0.2], yaw_degrees=91.0)
+
+    map_to_odom = _planar_map_to_odom(corrected_map_to_base, odom_to_base)
+    recomposed = map_to_odom @ odom_to_base
+
+    assert np.allclose(
+        recomposed[:3, 3], corrected_map_to_base[:3, 3], atol=1.0e-12)
+    assert np.isclose(
+        _yaw_from_rotation(recomposed[:3, :3]),
+        _yaw_from_rotation(corrected_map_to_base[:3, :3]),
+        atol=1.0e-12,
+    )
+    assert np.allclose(map_to_odom[:3, 2], [0.0, 0.0, 1.0], atol=1.0e-12)
 
 
 def test_quality_gate_rejects_cloud_without_correspondences():

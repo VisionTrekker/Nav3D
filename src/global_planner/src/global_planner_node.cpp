@@ -13,6 +13,7 @@
 
 #include <filesystem>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -25,10 +26,12 @@ namespace
 {
 constexpr const char * kMapFrame = "map";
 constexpr const char * kBodyFrame = "base_link";
+constexpr const char * kLocalizationOdomTopic = "/lio/localization/odom";
 constexpr const char * kDefaultPcdMap =
   "/home/nhy/code/vscode/Nav3D/maps/campus3_no_elevator.pcd";
 constexpr const char * kDefaultBtOutput =
   "/tmp/nav3d_global_planner_campus3_no_elevator.bt";
+constexpr double kUnsetExpectedOctomapResolution = -1.0;
 constexpr double kDefaultMaxEndpointSnapDistance = 2.5;
 constexpr double kDefaultRobotRadius = 0.25;
 constexpr int kDefaultMaxIterations = 800000;
@@ -52,11 +55,21 @@ public:
   {
     pcd_map_file_ = declare_parameter<std::string>("pcd_map_file", kDefaultPcdMap);
     octomap_output_bt_ = declare_parameter<std::string>("octomap_output_bt", kDefaultBtOutput);
+    expected_octomap_resolution_ = declare_parameter<double>(
+      "expected_octomap_resolution", kUnsetExpectedOctomapResolution);
+    if (expected_octomap_resolution_ != kUnsetExpectedOctomapResolution &&
+        (!std::isfinite(expected_octomap_resolution_) || expected_octomap_resolution_ <= 0.0)) {
+      throw std::invalid_argument(
+              "expected_octomap_resolution must be positive or -1 to disable the check");
+    }
     max_endpoint_snap_distance_ = declare_parameter<double>(
       "max_endpoint_snap_distance",
       kDefaultMaxEndpointSnapDistance);
     const auto odom_topic = declare_parameter<std::string>(
-      "odom_topic", "/lio/localization/odom");
+      "odom_topic", kLocalizationOdomTopic);
+    odom_topic_ = odom_topic;
+    require_map_frame_odom_ = declare_parameter<bool>(
+      "require_map_frame_odom", odom_topic == kLocalizationOdomTopic);
     const auto goal_topic = declare_parameter<std::string>("goal_topic", "/goal_pose");
     const auto path_topic = declare_parameter<std::string>(
       "path_topic", "/global_planner/path");
@@ -132,6 +145,16 @@ public:
     RCLCPP_INFO(
       get_logger(), "Global planner interfaces: odom=%s goal=%s path=%s",
       odom_topic.c_str(), goal_topic.c_str(), path_topic.c_str());
+    RCLCPP_INFO(
+      get_logger(),
+      "Global planner odom source: topic=%s expected_frame=%s child_frame=%s",
+      odom_topic_.c_str(), require_map_frame_odom_ ? kMapFrame : "map or odom via tf",
+      kBodyFrame);
+    RCLCPP_INFO(
+      get_logger(),
+      "Global planner geometry diagnostics: map_frame=%s body_frame=%s "
+      "expected_octomap_resolution=%.3f m",
+      kMapFrame, kBodyFrame, expected_octomap_resolution_);
   }
 
 private:
@@ -166,6 +189,18 @@ private:
 
     planner_->setOctomap(octree_);
     map_ready_ = true;
+    if (expected_octomap_resolution_ != kUnsetExpectedOctomapResolution &&
+        std::abs(octree_->getResolution() - expected_octomap_resolution_) > 1.0e-6) {
+      RCLCPP_WARN(
+        get_logger(),
+        "OctoMap resolution consistency WARNING: actual=%.6f m expected=%.6f m",
+        octree_->getResolution(), expected_octomap_resolution_);
+    } else if (expected_octomap_resolution_ != kUnsetExpectedOctomapResolution) {
+      RCLCPP_INFO(
+        get_logger(),
+        "OctoMap resolution consistency PASS: actual=%.6f m expected=%.6f m",
+        octree_->getResolution(), expected_octomap_resolution_);
+    }
     RCLCPP_INFO(
       get_logger(),
       "OctoMap ready: resolution=%.3f leaf_nodes=%zu",
@@ -217,6 +252,14 @@ private:
       return;
     }
 
+    if (require_map_frame_odom_ && msg->header.frame_id != kMapFrame) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 1000,
+        "Ignoring localization odometry from frame '%s'; expected map -> %s",
+        msg->header.frame_id.c_str(), kBodyFrame);
+      return;
+    }
+
     geometry_msgs::msg::PoseStamped source_pose;
     source_pose.header = msg->header;
     source_pose.pose = msg->pose.pose;
@@ -234,13 +277,17 @@ private:
         return;
       }
     }
+    latest_odom_pose_ = current_pose_;
+    ++odom_sequence_;
     have_odom_ = true;
 
     if (!odom_logged_) {
       RCLCPP_INFO(
         get_logger(),
-        "odom received: frame=%s position=(%.3f, %.3f, %.3f)",
+        "odom received: topic=%s source_frame=%s stored_frame=%s position=(%.3f, %.3f, %.3f)",
+        odom_topic_.c_str(),
         msg->header.frame_id.c_str(),
+        current_pose_.header.frame_id.c_str(),
         current_pose_.pose.position.x,
         current_pose_.pose.position.y,
         current_pose_.pose.position.z);
@@ -287,10 +334,11 @@ private:
       return;
     }
 
-    const global_planner::PointPose start{
-      current_pose_.pose.position.x,
-      current_pose_.pose.position.y,
-      current_pose_.pose.position.z};
+    const global_planner::PointPose latest_odom_position{
+      latest_odom_pose_.pose.position.x,
+      latest_odom_pose_.pose.position.y,
+      latest_odom_pose_.pose.position.z};
+    const global_planner::PointPose start = latest_odom_position;
     const global_planner::PointPose goal{
       goal_pose_.pose.position.x,
       goal_pose_.pose.position.y,
@@ -314,8 +362,43 @@ private:
 
     RCLCPP_INFO(
       get_logger(),
+      require_map_frame_odom_
+      ? "planning input diagnostics: latest localization odom position=(%.3f, %.3f, %.3f) "
+        "actual start passed to tryPlan=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) "
+        "odom_seq=%llu"
+      : "planning input diagnostics: latest configured odom position=(%.3f, %.3f, %.3f) "
+        "actual start passed to tryPlan=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) "
+        "odom_seq=%llu",
+      latest_odom_position.x, latest_odom_position.y, latest_odom_position.z,
+      start.x, start.y, start.z,
+      goal.x, goal.y, goal.z,
+      static_cast<unsigned long long>(odom_sequence_));
+    if (distance(start, latest_odom_position) > 1.0e-9) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Planning start mismatch: actual start passed to tryPlan differs from latest odom "
+        "by %.9f m; refusing to use another pose source",
+        distance(start, latest_odom_position));
+      return;
+    }
+
+    RCLCPP_INFO(
+      get_logger(),
       "planning started: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f)",
       start.x, start.y, start.z, goal.x, goal.y, goal.z);
+
+    const double resolution = octree_->getResolution();
+    const auto grid_center = [resolution](const double coordinate) {
+        const auto index = static_cast<int>(std::floor(coordinate / resolution));
+        return (static_cast<double>(index) + 0.5) * resolution;
+      };
+    RCLCPP_INFO(
+      get_logger(),
+      "Global grid diagnostics: resolution=%.3f m start_cell_center=(%.3f, %.3f, %.3f) "
+      "goal_cell_center=(%.3f, %.3f, %.3f)",
+      resolution,
+      grid_center(start.x), grid_center(start.y), grid_center(start.z),
+      grid_center(goal.x), grid_center(goal.y), grid_center(goal.z));
 
     planner_->makePlan(start, goal);
 
@@ -355,7 +438,15 @@ private:
     }
 
     path_pub_->publish(path);
-    RCLCPP_INFO(get_logger(), "planning success: path point count=%zu", path.poses.size());
+    const auto & first = planner_results.front();
+    RCLCPP_INFO(
+      get_logger(),
+      "planning success: path point count=%zu first=(%.3f, %.3f, %.3f) "
+      "last=(%.3f, %.3f, %.3f) start_error=%.3f m goal_error=%.3f m",
+      path.poses.size(),
+      first.x, first.y, first.z,
+      last.x, last.y, last.z,
+      distance(first, start), endpoint_distance);
   }
 
   bool is_inside_map_bounds(const global_planner::PointPose & point) const
@@ -406,16 +497,21 @@ private:
   std::shared_ptr<octomap::OcTree> octree_;
 
   geometry_msgs::msg::PoseStamped current_pose_;
+  geometry_msgs::msg::PoseStamped latest_odom_pose_;
   geometry_msgs::msg::PoseStamped goal_pose_;
 
+  std::string odom_topic_;
   std::string pcd_map_file_;
   std::string octomap_output_bt_;
+  double expected_octomap_resolution_ = kUnsetExpectedOctomapResolution;
   double max_endpoint_snap_distance_ = kDefaultMaxEndpointSnapDistance;
 
   bool map_ready_ = false;
   bool have_odom_ = false;
   bool have_goal_ = false;
   bool odom_logged_ = false;
+  bool require_map_frame_odom_ = false;
+  std::uint64_t odom_sequence_ = 0;
 };
 
 int main(int argc, char ** argv)

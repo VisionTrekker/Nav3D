@@ -11,7 +11,11 @@ from bringup.launch_helpers import lio_mapping_remaps, lio_localization_remaps, 
 def generate_launch_description():
     mode = LaunchConfiguration('mode')
     bag_path = LaunchConfiguration('bag_path')
+    bag_loop = LaunchConfiguration('bag_loop')
+    bag_start_delay = LaunchConfiguration('bag_start_delay')
     use_loc = LaunchConfiguration('use_localization')
+    auto_initialpose = LaunchConfiguration('auto_initialpose')
+    initialpose = LaunchConfiguration('initialpose')
     enable_goal_marker = LaunchConfiguration('enable_goal_marker')
     enable_rviz = LaunchConfiguration('enable_rviz')
     enable_scan_context = LaunchConfiguration('enable_scan_context')
@@ -49,8 +53,20 @@ def generate_launch_description():
         DeclareLaunchArgument('bag_path',
                              default_value='/media/lenovo/disk/planner_ws/data-rosbag2/Campus3',
                              description='Path to rosbag2 directory'),
+        DeclareLaunchArgument(
+            'bag_loop', default_value='true',
+            description='Loop rosbag playback when mode:=bag'),
+        DeclareLaunchArgument(
+            'bag_start_delay', default_value='0.0',
+            description='Seconds to wait before rosbag playback so sensor subscribers can connect'),
         DeclareLaunchArgument('use_localization', default_value='false',
                              description='Run lio_localization (true) or lio_mapping (false)'),
+        DeclareLaunchArgument(
+            'auto_initialpose', default_value='false',
+            description='Publish configured map-frame initialpose once in localization mode'),
+        DeclareLaunchArgument(
+            'initialpose', default_value='',
+            description='Map-frame initial pose as x,y,z,yaw; used only with auto_initialpose=true'),
         DeclareLaunchArgument(
             'enable_goal_marker', default_value='false',
             description='Start the optional interactive goal marker server'),
@@ -74,9 +90,20 @@ def generate_launch_description():
                              description='Path to PCD map file'),
 
         # Rosbag replay when mode==bag
-        ExecuteProcess(
-            cmd=['ros2', 'bag', 'play', bag_path, '--loop'],
-            condition=IfCondition(PythonExpression(["'", mode, "' == 'bag'"])),
+        TimerAction(
+            period=bag_start_delay,
+            actions=[
+                ExecuteProcess(
+                    cmd=['ros2', 'bag', 'play', bag_path, '--loop'],
+                    condition=IfCondition(PythonExpression([
+                        "'", mode, "' == 'bag' and '", bag_loop, "' == 'true'"])),
+                ),
+                ExecuteProcess(
+                    cmd=['ros2', 'bag', 'play', bag_path],
+                    condition=IfCondition(PythonExpression([
+                        "'", mode, "' == 'bag' and '", bag_loop, "' == 'false'"])),
+                ),
+            ],
         ),
 
         # Static transform: map -> odom (identity placeholder, lio publishes odom->base)
@@ -135,6 +162,19 @@ def generate_launch_description():
             output='screen',
             parameters=[localization_icp_yaml],
             condition=IfCondition(PythonExpression(["'", use_loc, "' == 'true'"])),
+        ),
+
+        # Optional deterministic initialization for bag/field bringup.  The
+        # pose is supplied in the fixed PCD map frame; raw odometry remains
+        # strictly an odom-frame input.
+        Node(
+            package='lio_localization',
+            executable='auto_initialpose_once',
+            name='auto_initialpose_once',
+            output='screen',
+            parameters=[{'map_pose': initialpose}],
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'true' and '", auto_initialpose, "' == 'true'"])),
         ),
 
         # Fixed-PCD refinement publishes pose measurements only.  The composer

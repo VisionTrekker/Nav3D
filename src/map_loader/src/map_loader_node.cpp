@@ -136,6 +136,7 @@ public:
   MapLoaderNode() : Node("map_loader_node") {
     const auto pcd_path = declare_parameter<std::string>("pcd_path", "");
     const auto resolution = declare_parameter<double>("resolution", 0.1);
+    configured_resolution_ = resolution;
     voxel_downsample_m_ = declare_parameter<double>("voxel_downsample_m", 0.0);
     min_points_per_voxel_ = declare_parameter<int>("min_points_per_voxel", 1);
     min_cluster_voxels_ = declare_parameter<int>("min_cluster_voxels", 1);
@@ -165,6 +166,10 @@ public:
       "/map_loader/scan_context_index", rclcpp::QoS(1).reliable().transient_local());
 
     RCLCPP_INFO(get_logger(), "MapLoaderNode ready. Service: ~/load_map");
+    RCLCPP_INFO(
+      get_logger(),
+      "Map loader geometry diagnostics: OctoMap frame=map configured_resolution=%.3f m",
+      configured_resolution_);
 
     if (!pcd_path.empty()) {
       auto request = std::make_shared<map_loader::srv::LoadMap::Request>();
@@ -184,6 +189,7 @@ private:
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pcd_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr idx_pub_;
   double voxel_downsample_m_ = 0.0;
+  double configured_resolution_ = 0.1;
   int min_points_per_voxel_ = 1;
   int min_cluster_voxels_ = 1;
 
@@ -191,6 +197,12 @@ private:
                map_loader::srv::LoadMap::Response::SharedPtr res) {
     RCLCPP_INFO(get_logger(), "Received load_map request: PCD=%s, resolution=%.3f",
                req->pcd_path.c_str(), req->resolution);
+    if (std::abs(static_cast<double>(req->resolution) - configured_resolution_) > 1.0e-6) {
+      RCLCPP_WARN(
+        get_logger(),
+        "Map loader resolution consistency WARNING: request=%.6f m configured=%.6f m",
+        req->resolution, configured_resolution_);
+    }
 
     try {
       if (req->pcd_path.empty() || req->resolution <= 0.0F) {
@@ -258,6 +270,10 @@ private:
         tree->updateNode(voxelCenter(key, req->resolution), true);
       }
       tree->updateInnerOccupancy();
+      RCLCPP_INFO(
+        get_logger(),
+        "OctoMap geometry diagnostics: frame=map resolution=%.3f m leaf_nodes=%zu",
+        tree->getResolution(), tree->getNumLeafNodes());
 
       octomap_msgs::msg::Octomap octomap_msg;
       if (!octomap_msgs::fullMapToMsg(*tree, octomap_msg)) {

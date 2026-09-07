@@ -48,6 +48,7 @@ class FixedMapIcpNode(Node):
             self.declare_parameter('max_points_per_voxel', 20).value)
         self._every_n_frames = int(
             self.declare_parameter('every_n_frames', 5).value)
+        self._voxel_size = voxel_size
         sync_queue_size = int(self.declare_parameter('sync_queue_size', 30).value)
         sync_slop = float(self.declare_parameter('sync_slop', 0.10).value)
         if self._every_n_frames <= 0 or sync_queue_size <= 0 or sync_slop < 0.0:
@@ -95,6 +96,7 @@ class FixedMapIcpNode(Node):
         )
         self._synchronizer.registerCallback(self._on_inputs)
         self._frame_count = 0
+        self._input_contract_logged = False
 
         self.get_logger().info(
             f'Loaded immutable map {map_path} with {map_points.shape[0]} finite points; '
@@ -102,6 +104,10 @@ class FixedMapIcpNode(Node):
         self.get_logger().info(
             'Fixed-map ICP is waiting for initialized /lio/localization/odom; '
             f'registration runs every {self._every_n_frames} synchronized frames')
+        self.get_logger().info(
+            'Localization geometry diagnostics: map_frame=map body_frame=base_link '
+            f'icp_voxel_size={self._voxel_size:.3f} m '
+            f'sync_slop={sync_slop:.3f} s')
 
     def _on_inputs(
         self,
@@ -126,6 +132,19 @@ class FixedMapIcpNode(Node):
             self.get_logger().warning(
                 'Ignoring localization prediction whose frames are not map -> base_link')
             return
+
+        if not self._input_contract_logged:
+            cloud_stamp = self._stamp_to_seconds(cloud.header.stamp)
+            raw_stamp = self._stamp_to_seconds(raw_odom.header.stamp)
+            predicted_stamp = self._stamp_to_seconds(predicted_odom.header.stamp)
+            self.get_logger().info(
+                'ICP input diagnostics: '
+                f'cloud_frame={cloud.header.frame_id} '
+                f'raw_odom={raw_odom.header.frame_id}->{raw_odom.child_frame_id} '
+                f'predicted_odom={predicted_odom.header.frame_id}->{predicted_odom.child_frame_id} '
+                f'stamp_delta_cloud_raw={abs(cloud_stamp - raw_stamp):.6f} s '
+                f'stamp_delta_predicted_raw={abs(predicted_stamp - raw_stamp):.6f} s')
+            self._input_contract_logged = True
 
         try:
             odom_to_base = _pose_to_matrix(raw_odom.pose.pose)
@@ -163,6 +182,10 @@ class FixedMapIcpNode(Node):
             f'correspondences={result.correspondence_count}, '
             f'jump={result.translation_jump:.3f} m/'
             f'{result.rotation_jump_degrees:.2f} deg')
+
+    @staticmethod
+    def _stamp_to_seconds(stamp) -> float:
+        return float(stamp.sec) + float(stamp.nanosec) * 1.0e-9
 
 
 def main(args=None) -> None:

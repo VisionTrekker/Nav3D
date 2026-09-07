@@ -22,13 +22,29 @@ Eigen::Isometry3d makeBodyTLidar() {
     return lidar_T_body.inverse();
 }
 
+bool valid_output_state(const State &state, double stamp_sec) {
+    const double quaternion_norm = state.q.norm();
+    return std::isfinite(stamp_sec) &&
+           state.p.allFinite() &&
+           state.v.allFinite() &&
+           std::isfinite(state.z) &&
+           state.q.coeffs().allFinite() &&
+           std::isfinite(quaternion_norm) &&
+           quaternion_norm > 1.0e-12;
+}
+
 }  // namespace
 
 /********************************************** Publish Function **********************************************/
 
 void LIONode::publish_imu_odometry(State state, double stamp_sec) {
-    lio_ros::Odometry odom_imu;
     const double odom_stamp = stamp_sec >= 0.0 ? stamp_sec : lidar_end_time;
+    if (!valid_output_state(state, odom_stamp)) {
+        LOG_ERROR(Sensor, "skip IMU odometry/trajectory publication: state or timestamp is NaN/Inf/invalid");
+        return;
+    }
+
+    lio_ros::Odometry odom_imu;
     // odom.header.stamp = ros::Time::now();  // 使用 ROS 1 的时间戳
     odom_imu.header.stamp = get_ros_time(odom_stamp);
     odom_imu.header.frame_id = FRAME_PARENT_ID;
@@ -74,8 +90,13 @@ void LIONode::publish_imu_odometry(State state, double stamp_sec) {
 }
 
 void LIONode::publish_body_odometry(State state, double stamp_sec) {
-    lio_ros::Odometry odom_body;
     const double odom_stamp = stamp_sec >= 0.0 ? stamp_sec : lidar_end_time;
+    if (!valid_output_state(state, odom_stamp)) {
+        LOG_ERROR(Sensor, "skip body odometry/TF publication: state or timestamp is NaN/Inf/invalid");
+        return;
+    }
+
+    lio_ros::Odometry odom_body;
     odom_body.header.stamp = get_ros_time(odom_stamp);
     odom_body.header.frame_id = FRAME_PARENT_ID;
     odom_body.child_frame_id = FRAME_BODY_ID;
@@ -94,6 +115,13 @@ void LIONode::publish_body_odometry(State state, double stamp_sec) {
     Eigen::Matrix4d world_T_body = world_T_imu * imu_T_lidar * lidar_T_body;
     Eigen::Quaterniond body_q = Eigen::Quaterniond(world_T_body.block<3, 3>(0, 0));
     Eigen::Vector3d body_p = world_T_body.block<3, 1>(0, 3);
+    if (!body_p.allFinite() ||
+        !body_q.coeffs().allFinite() ||
+        !std::isfinite(body_q.norm()) ||
+        body_q.norm() <= 1.0e-12) {
+        LOG_ERROR(Sensor, "skip body odometry/TF publication: transformed pose is NaN/Inf/invalid");
+        return;
+    }
     odom_body.pose.pose.position.x = body_p(0);
     odom_body.pose.pose.position.y = body_p(1);
     odom_body.pose.pose.position.z = body_p(2);
@@ -104,6 +132,13 @@ void LIONode::publish_body_odometry(State state, double stamp_sec) {
 
     if (state.in_elevator) {
         odom_body.pose.pose.position.z += state.z;
+    }
+
+    if (!std::isfinite(odom_body.pose.pose.position.x) ||
+        !std::isfinite(odom_body.pose.pose.position.y) ||
+        !std::isfinite(odom_body.pose.pose.position.z)) {
+        LOG_ERROR(Sensor, "skip body odometry/TF publication: final position is NaN/Inf");
+        return;
     }
 
     odom_body_pub_.publish(odom_body);

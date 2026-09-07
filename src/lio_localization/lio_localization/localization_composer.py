@@ -9,6 +9,7 @@ alignment to convert raw LIO odometry into the formal localization output.
 
 from copy import deepcopy
 from collections import deque
+import math
 
 import numpy as np
 import rclpy
@@ -61,6 +62,33 @@ def _inverse_se3(transform: np.ndarray) -> np.ndarray:
     inverse[:3, :3] = rotation.T
     inverse[:3, 3] = -rotation.T @ transform[:3, 3]
     return inverse
+
+
+def _yaw_from_rotation(rotation: np.ndarray) -> float:
+    """Return the ZYX yaw of a rotation matrix."""
+    return math.atan2(float(rotation[1, 0]), float(rotation[0, 0]))
+
+
+def _planar_map_to_odom(
+        map_to_base: np.ndarray, odom_to_base: np.ndarray) -> np.ndarray:
+    """Align map and odom with translation and yaw, without tilting map."""
+    yaw_delta = _yaw_from_rotation(map_to_base[:3, :3]) - _yaw_from_rotation(
+        odom_to_base[:3, :3])
+    yaw_delta = math.atan2(math.sin(yaw_delta), math.cos(yaw_delta))
+    cosine = math.cos(yaw_delta)
+    sine = math.sin(yaw_delta)
+
+    map_to_odom = np.eye(4, dtype=np.float64)
+    map_to_odom[:3, :3] = [
+        [cosine, -sine, 0.0],
+        [sine, cosine, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+    map_to_odom[:3, 3] = (
+        map_to_base[:3, 3]
+        - map_to_odom[:3, :3] @ odom_to_base[:3, 3]
+    )
+    return map_to_odom
 
 
 def _matrix_to_pose(transform: np.ndarray) -> Pose:
@@ -122,14 +150,25 @@ class LocalizationComposer(Node):
         history_size = int(self.declare_parameter('raw_odom_history_size', 500).value)
         self._correction_tolerance = float(
             self.declare_parameter('correction_timestamp_tolerance', 0.15).value)
-        if history_size <= 0 or self._correction_tolerance < 0.0:
+        self._max_map_to_odom_translation_jump = float(
+            self.declare_parameter('max_map_to_odom_translation_jump', 0.5).value)
+        self._max_map_to_odom_rotation_jump_degrees = float(
+            self.declare_parameter('max_map_to_odom_rotation_jump_degrees', 15.0).value)
+        self._planar_initial_alignment = bool(
+            self.declare_parameter('planar_initial_alignment', False).value)
+        if (history_size <= 0 or self._correction_tolerance < 0.0 or
+                self._max_map_to_odom_translation_jump <= 0.0 or
+                self._max_map_to_odom_rotation_jump_degrees <= 0.0):
             raise ValueError(
-                'raw_odom_history_size must be positive and correction tolerance nonnegative')
+                'raw odom history/tolerances and map-to-odom jump limits must be positive')
 
         self._latest_raw_odom = None
         self._latest_raw_transform = None
         self._map_to_odom = None
         self._raw_history = deque(maxlen=history_size)
+        self._raw_contract_logged = False
+        self._last_published_stamp = None
+        self._last_initialpose_stamp = None
 
         self._odom_sub = self.create_subscription(
             Odometry,
@@ -158,6 +197,12 @@ class LocalizationComposer(Node):
 
         self.get_logger().info(
             'Localization composer ready; waiting for /initialpose and raw body odometry')
+        self.get_logger().info(
+            'Localization geometry diagnostics: raw=odom->base_link, output=map->base_link, '
+            f'tf=map->odom, correction_timestamp_tolerance={self._correction_tolerance:.3f} s, '
+            f'max_map_to_odom_jump={self._max_map_to_odom_translation_jump:.3f} m/'
+            f'{self._max_map_to_odom_rotation_jump_degrees:.1f} deg, '
+            f'initial_alignment={"planar" if self._planar_initial_alignment else "full_se3"}')
 
     @staticmethod
     def _validate_raw_odom(msg: Odometry) -> bool:
@@ -182,6 +227,15 @@ class LocalizationComposer(Node):
         self._raw_history.append((
             self._stamp_to_nanoseconds(msg.header.stamp), msg, raw_transform))
 
+        if not self._raw_contract_logged:
+            self.get_logger().info(
+                'Localization input diagnostics: '
+                f'frame={msg.header.frame_id}->{msg.child_frame_id} '
+                f'stamp={self._stamp_to_seconds(msg):.9f} '
+                f'raw_position=({msg.pose.pose.position.x:.3f}, '
+                f'{msg.pose.pose.position.y:.3f}, {msg.pose.pose.position.z:.3f})')
+            self._raw_contract_logged = True
+
         if self._map_to_odom is not None:
             self._publish_composed(msg, raw_transform)
 
@@ -191,21 +245,60 @@ class LocalizationComposer(Node):
                 f'Ignoring /initialpose with frame {msg.header.frame_id!r}; expected map')
             return
 
+        initialpose_stamp = self._stamp_to_nanoseconds(msg.header.stamp)
+        if (initialpose_stamp > 0 and
+                initialpose_stamp == self._last_initialpose_stamp):
+            return
+
         if self._latest_raw_odom is None or self._latest_raw_transform is None:
             self.get_logger().warning(
                 'Ignoring /initialpose: no valid /lio/mapping/odom_body has been received')
             return
 
+        raw_odom = self._latest_raw_odom
+        odom_to_base = self._latest_raw_transform
+        stamp_error = 0.0
+        if initialpose_stamp > 0:
+            raw_stamp, raw_odom, odom_to_base = min(
+                self._raw_history,
+                key=lambda entry: abs(entry[0] - initialpose_stamp),
+            )
+            stamp_error = abs(raw_stamp - initialpose_stamp) * 1.0e-9
+            if stamp_error > self._correction_tolerance:
+                self.get_logger().warning(
+                    'Ignoring /initialpose: nearest raw odometry differs by '
+                    f'{stamp_error:.6f} s '
+                    f'(limit {self._correction_tolerance:.6f} s)')
+                return
+
         try:
             map_to_base = _pose_to_matrix(msg.pose.pose)
-            self._map_to_odom = map_to_base @ _inverse_se3(self._latest_raw_transform)
+            if self._planar_initial_alignment:
+                self._map_to_odom = _planar_map_to_odom(map_to_base, odom_to_base)
+            else:
+                self._map_to_odom = map_to_base @ _inverse_se3(odom_to_base)
         except ValueError as exc:
             self.get_logger().warning(f'Ignoring invalid /initialpose: {exc}')
             return
 
+        rotation = self._map_to_odom[:3, :3]
+        roll = math.atan2(float(rotation[2, 1]), float(rotation[2, 2]))
+        pitch = math.atan2(
+            -float(rotation[2, 0]),
+            math.hypot(float(rotation[2, 1]), float(rotation[2, 2])),
+        )
+        yaw = _yaw_from_rotation(rotation)
+        if initialpose_stamp > 0:
+            self._last_initialpose_stamp = initialpose_stamp
         self.get_logger().info(
             'Initialized map -> odom from /initialpose using raw odometry stamp '
-            f'{self._stamp_to_seconds(self._latest_raw_odom):.9f}',
+            f'{self._stamp_to_seconds(raw_odom):.9f} '
+            f'({stamp_error:.6f} s stamp error, '
+            f'{"planar" if self._planar_initial_alignment else "full_se3"} alignment); '
+            f'translation=({self._map_to_odom[0, 3]:.3f}, '
+            f'{self._map_to_odom[1, 3]:.3f}, {self._map_to_odom[2, 3]:.3f}); '
+            f'rpy_deg=({math.degrees(roll):.3f}, {math.degrees(pitch):.3f}, '
+            f'{math.degrees(yaw):.3f})',
         )
         self._publish_composed(self._latest_raw_odom, self._latest_raw_transform)
 
@@ -237,20 +330,61 @@ class LocalizationComposer(Node):
 
         try:
             corrected_map_to_base = _pose_to_matrix(msg.pose.pose)
-            self._map_to_odom = corrected_map_to_base @ _inverse_se3(odom_to_base)
+            if self._planar_initial_alignment:
+                candidate_map_to_odom = _planar_map_to_odom(
+                    corrected_map_to_base, odom_to_base)
+            else:
+                candidate_map_to_odom = corrected_map_to_base @ _inverse_se3(odom_to_base)
         except ValueError as exc:
             self.get_logger().warning(f'Ignoring invalid pose correction: {exc}')
             return
 
+        delta = _inverse_se3(self._map_to_odom) @ candidate_map_to_odom
+        translation_jump = float(np.linalg.norm(delta[:3, 3]))
+        cosine = float(np.clip((np.trace(delta[:3, :3]) - 1.0) * 0.5, -1.0, 1.0))
+        rotation_jump_degrees = float(np.degrees(np.arccos(cosine)))
+        if (translation_jump > self._max_map_to_odom_translation_jump or
+                rotation_jump_degrees > self._max_map_to_odom_rotation_jump_degrees):
+            self.get_logger().warning(
+                'Ignoring pose correction: map -> odom jump '
+                f'{translation_jump:.3f} m/{rotation_jump_degrees:.2f} deg exceeds '
+                f'limit {self._max_map_to_odom_translation_jump:.3f} m/'
+                f'{self._max_map_to_odom_rotation_jump_degrees:.2f} deg')
+            return
+
+        self._map_to_odom = candidate_map_to_odom
+        rotation = self._map_to_odom[:3, :3]
+        roll = math.atan2(float(rotation[2, 1]), float(rotation[2, 2]))
+        pitch = math.atan2(
+            -float(rotation[2, 0]),
+            math.hypot(float(rotation[2, 1]), float(rotation[2, 2])),
+        )
+        yaw = _yaw_from_rotation(rotation)
+
         self.get_logger().info(
             'Updated map -> odom from fixed-map pose correction using matched '
-            f'raw odometry ({stamp_error:.6f} s stamp error)')
+            f'raw odometry ({stamp_error:.6f} s stamp error); '
+            f'{"planar" if self._planar_initial_alignment else "full_se3"} alignment; '
+            f'translation=({self._map_to_odom[0, 3]:.3f}, '
+            f'{self._map_to_odom[1, 3]:.3f}, {self._map_to_odom[2, 3]:.3f}); '
+            f'rpy_deg=({math.degrees(roll):.3f}, {math.degrees(pitch):.3f}, '
+            f'{math.degrees(yaw):.3f})')
         if self._latest_raw_odom is not None and self._latest_raw_transform is not None:
             self._publish_composed(self._latest_raw_odom, self._latest_raw_transform)
 
     def _publish_composed(self, raw: Odometry, odom_to_base: np.ndarray) -> None:
         if self._map_to_odom is None:
             return
+
+        stamp = self._stamp_to_nanoseconds(raw.header.stamp)
+        if self._last_published_stamp is not None:
+            if stamp < self._last_published_stamp:
+                self.get_logger().warning(
+                    'Ignoring non-monotonic localization output: '
+                    f'last={self._last_published_stamp} current={stamp}')
+                return
+            if stamp == self._last_published_stamp:
+                return
 
         map_to_base = self._map_to_odom @ odom_to_base
         try:
@@ -270,6 +404,7 @@ class LocalizationComposer(Node):
         # This first-stage composer only guarantees the pose and TF contract.
         output.twist = deepcopy(raw.twist)
         self._localization_pub.publish(output)
+        self._last_published_stamp = stamp
         self._publish_tf(raw.header.stamp)
 
     def _publish_tf(self, stamp) -> None:
