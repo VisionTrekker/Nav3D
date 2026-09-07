@@ -9,6 +9,7 @@
 #include "node/LidarPipeline.h"
 #include "support/common_lib.h"
 #include "support/LIONode.h"
+#include "frame_ids.h"
 #include "estimator/IMUProcess.h"
 #include "estimator/ESEKF.h"
 #include "elevator/ElevatorSelfExit.h"
@@ -728,7 +729,7 @@ void LidarPipeline::commitFrame(const FrameData& frame, const State& post_state,
 
     lio_ros::ElevatorState elevator_msg;
     elevator_msg.header.stamp = get_ros_time(state_commit_time);
-    elevator_msg.header.frame_id = "world";
+    elevator_msg.header.frame_id = FRAME_PARENT_ID;
     elevator_msg.in_elevator = post_state.in_elevator;
     elevator_msg.displacement = post_state.z;
     elevator_msg.velocity = post_state.vz;

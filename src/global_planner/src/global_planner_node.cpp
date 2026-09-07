@@ -3,6 +3,13 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <nav_msgs/msg/path.hpp>
+#include <octomap_msgs/conversions.h>
+#include <octomap_msgs/msg/octomap.hpp>
+#include <tf2/exceptions.h>
+#include <tf2/time.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 #include <filesystem>
 #include <cmath>
@@ -17,9 +24,23 @@
 namespace
 {
 constexpr const char * kMapFrame = "map";
-constexpr const char * kDefaultPcdMap = "maps/zhiyuan_rev.pcd";
-constexpr const char * kDefaultBtOutput = "/tmp/nav3d_global_planner_zhiyuan_rev.bt";
+constexpr const char * kBodyFrame = "base_link";
+constexpr const char * kDefaultPcdMap =
+  "/home/nhy/code/vscode/Nav3D/maps/campus3_no_elevator.pcd";
+constexpr const char * kDefaultBtOutput =
+  "/tmp/nav3d_global_planner_campus3_no_elevator.bt";
 constexpr double kDefaultMaxEndpointSnapDistance = 2.5;
+constexpr double kDefaultRobotRadius = 0.25;
+constexpr int kDefaultMaxIterations = 800000;
+constexpr int kDefaultSnapSearchRadiusCells = 12;
+constexpr bool kDefaultRequireGroundSupport = true;
+constexpr bool kDefaultStrictDirectGroundSupport = false;
+constexpr int kDefaultGroundSupportXyRadiusCells = 1;
+constexpr int kDefaultGroundSupportDepthCells = 1;
+constexpr bool kDefaultEnablePreblockedCostmap = true;
+constexpr int kDefaultPreblockedCostmapRadiusCells = 3;
+constexpr double kDefaultPreblockedCostmapWeight = 2.5;
+constexpr bool kDefaultLowestTraversableOnly = false;
 }  // namespace
 
 class GlobalPlannerNode : public rclcpp::Node
@@ -34,22 +55,83 @@ public:
     max_endpoint_snap_distance_ = declare_parameter<double>(
       "max_endpoint_snap_distance",
       kDefaultMaxEndpointSnapDistance);
+    const auto odom_topic = declare_parameter<std::string>(
+      "odom_topic", "/lio/localization/odom");
+    const auto goal_topic = declare_parameter<std::string>("goal_topic", "/goal_pose");
+    const auto path_topic = declare_parameter<std::string>(
+      "path_topic", "/global_planner/path");
+    const auto octomap_topic = declare_parameter<std::string>(
+      "octomap_topic", "/map_loader/octomap");
+    const bool use_octomap_topic = declare_parameter<bool>("use_octomap_topic", false);
+    const double robot_radius = declare_parameter<double>("robot_radius", kDefaultRobotRadius);
+    const int max_iterations = declare_parameter<int>("max_iterations", kDefaultMaxIterations);
+    const int snap_search_radius_cells = declare_parameter<int>(
+      "snap_search_radius_cells", kDefaultSnapSearchRadiusCells);
+    const bool require_ground_support = declare_parameter<bool>(
+      "require_ground_support", kDefaultRequireGroundSupport);
+    const bool strict_direct_ground_support = declare_parameter<bool>(
+      "strict_direct_ground_support", kDefaultStrictDirectGroundSupport);
+    const int ground_support_xy_radius_cells = declare_parameter<int>(
+      "ground_support_xy_radius_cells", kDefaultGroundSupportXyRadiusCells);
+    const int ground_support_depth_cells = declare_parameter<int>(
+      "ground_support_depth_cells", kDefaultGroundSupportDepthCells);
+    const bool enable_preblocked_costmap = declare_parameter<bool>(
+      "enable_preblocked_costmap", kDefaultEnablePreblockedCostmap);
+    const int preblocked_costmap_radius_cells = declare_parameter<int>(
+      "preblocked_costmap_radius_cells", kDefaultPreblockedCostmapRadiusCells);
+    const double preblocked_costmap_weight = declare_parameter<double>(
+      "preblocked_costmap_weight", kDefaultPreblockedCostmapWeight);
+    const bool lowest_traversable_only = declare_parameter<bool>(
+      "lowest_traversable_only", kDefaultLowestTraversableOnly);
 
-    load_map();
+    if (odom_topic.empty() || goal_topic.empty() || path_topic.empty() ||
+        (use_octomap_topic && octomap_topic.empty())) {
+      throw std::invalid_argument("Global planner topic parameters must not be empty");
+    }
+
+    planner_->configurePlanningParameters(
+      robot_radius,
+      max_iterations,
+      snap_search_radius_cells,
+      require_ground_support,
+      strict_direct_ground_support,
+      ground_support_xy_radius_cells,
+      ground_support_depth_cells,
+      enable_preblocked_costmap,
+      preblocked_costmap_radius_cells,
+      preblocked_costmap_weight,
+      lowest_traversable_only);
+
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+    if (use_octomap_topic) {
+      octomap_sub_ = create_subscription<octomap_msgs::msg::Octomap>(
+        octomap_topic,
+        rclcpp::QoS(1).reliable().transient_local(),
+        std::bind(&GlobalPlannerNode::on_octomap, this, std::placeholders::_1));
+      RCLCPP_INFO(get_logger(), "Waiting for map-frame OctoMap on %s", octomap_topic.c_str());
+    } else {
+      load_map();
+    }
 
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-      "/lio/localization/odom",
+      odom_topic,
       rclcpp::QoS(10),
       std::bind(&GlobalPlannerNode::on_odom, this, std::placeholders::_1));
 
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/goal_pose",
+      goal_topic,
       rclcpp::QoS(10),
       std::bind(&GlobalPlannerNode::on_goal, this, std::placeholders::_1));
 
     path_pub_ = create_publisher<nav_msgs::msg::Path>(
-      "/global_planner/path",
+      path_topic,
       rclcpp::QoS(1).transient_local().reliable());
+
+    RCLCPP_INFO(
+      get_logger(), "Global planner interfaces: odom=%s goal=%s path=%s",
+      odom_topic.c_str(), goal_topic.c_str(), path_topic.c_str());
   }
 
 private:
@@ -91,11 +173,67 @@ private:
       octree_->getNumLeafNodes());
   }
 
+  void on_octomap(const octomap_msgs::msg::Octomap::SharedPtr msg)
+  {
+    if (msg->header.frame_id != kMapFrame) {
+      RCLCPP_WARN(
+        get_logger(), "Ignoring OctoMap in frame '%s'; expected map",
+        msg->header.frame_id.c_str());
+      return;
+    }
+
+    std::unique_ptr<octomap::AbstractOcTree> decoded(octomap_msgs::msgToMap(*msg));
+    auto * decoded_octree = dynamic_cast<octomap::OcTree *>(decoded.get());
+    if (!decoded_octree) {
+      RCLCPP_ERROR(get_logger(), "Ignoring OctoMap whose tree type is not OcTree");
+      return;
+    }
+
+    decoded.release();
+    octree_.reset(decoded_octree);
+    if (octree_->getNumLeafNodes() == 0) {
+      RCLCPP_ERROR(get_logger(), "Ignoring empty OctoMap");
+      octree_.reset();
+      return;
+    }
+
+    planner_->setOctomap(octree_);
+    map_ready_ = true;
+    RCLCPP_INFO(
+      get_logger(), "OctoMap received: resolution=%.3f leaf_nodes=%zu",
+      octree_->getResolution(), octree_->getNumLeafNodes());
+
+    if (have_odom_ && have_goal_) {
+      plan_once();
+    }
+  }
+
   void on_odom(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
-    current_pose_.header.frame_id = kMapFrame;
-    current_pose_.header.stamp = msg->header.stamp;
-    current_pose_.pose = msg->pose.pose;
+    if (msg->header.frame_id.empty() || msg->child_frame_id != kBodyFrame) {
+      RCLCPP_WARN(
+        get_logger(), "Ignoring odometry with frames '%s' -> '%s'; expected a framed pose of base_link",
+        msg->header.frame_id.c_str(), msg->child_frame_id.c_str());
+      return;
+    }
+
+    geometry_msgs::msg::PoseStamped source_pose;
+    source_pose.header = msg->header;
+    source_pose.pose = msg->pose.pose;
+    if (msg->header.frame_id == kMapFrame) {
+      current_pose_ = source_pose;
+    } else {
+      try {
+        current_pose_ = tf_buffer_->transform(
+          source_pose, kMapFrame, tf2::durationFromSec(0.1));
+      } catch (const tf2::TransformException & error) {
+        RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 1000,
+          "Ignoring odometry until %s -> map is available: %s",
+          msg->header.frame_id.c_str(), error.what());
+        return;
+      }
+    }
     have_odom_ = true;
 
     if (!odom_logged_) {
@@ -112,8 +250,13 @@ private:
 
   void on_goal(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
   {
+    if (msg->header.frame_id != kMapFrame) {
+      RCLCPP_WARN(
+        get_logger(), "Ignoring goal in frame '%s'; expected map",
+        msg->header.frame_id.c_str());
+      return;
+    }
     goal_pose_ = *msg;
-    goal_pose_.header.frame_id = kMapFrame;
     have_goal_ = true;
 
     RCLCPP_INFO(
@@ -253,7 +396,11 @@ private:
 
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
+  rclcpp::Subscription<octomap_msgs::msg::Octomap>::SharedPtr octomap_sub_;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
+
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   std::shared_ptr<global_planner::GlobalPlanner> planner_;
   std::shared_ptr<octomap::OcTree> octree_;

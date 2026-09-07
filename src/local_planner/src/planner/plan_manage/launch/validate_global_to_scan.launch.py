@@ -29,11 +29,11 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "pcd_map_file",
-            default_value="maps/zhiyuan_rev.pcd",
+            default_value="/home/nhy/code/vscode/Nav3D/maps/campus3_no_elevator.pcd",
         ),
         DeclareLaunchArgument(
             "octomap_output_bt",
-            default_value="/tmp/nav3d_global_planner_zhiyuan_rev.bt",
+            default_value="/tmp/nav3d_global_planner_campus3_no_elevator.bt",
         ),
         Node(
             package="global_planner",

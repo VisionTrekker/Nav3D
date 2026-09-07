@@ -11,12 +11,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             "pcd_map_file",
-            default_value="maps/zhiyuan_rev.pcd",
-            description="Existing project PCD map for Stage 2 global_planner validation",
+            default_value="/home/nhy/code/vscode/Nav3D/maps/campus3_no_elevator.pcd",
+            description="Default no-elevator Campus3 PCD map for Stage 2 global_planner validation",
         ),
         DeclareLaunchArgument(
             "octomap_output_bt",
-            default_value="/tmp/nav3d_global_planner_zhiyuan_rev.bt",
+            default_value="/tmp/nav3d_global_planner_campus3_no_elevator.bt",
             description="Temporary OctoMap .bt output generated from the PCD map",
         ),
         Node(

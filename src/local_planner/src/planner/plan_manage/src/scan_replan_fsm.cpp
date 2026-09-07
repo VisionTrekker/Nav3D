@@ -1000,50 +1000,66 @@ namespace scan_planner
       return planner_manager_->grid_map_->getInflateOccupancy(pt, estimateYawFromSegment(odom_pos_, pt));
     };
 
-    if (targetOccupancy(local_target_pt_) != 0)
+    auto referenceSegmentIsSafe = [&](const double candidate_t) {
+      if (candidate_t <= t_proj + 1e-6)
+        return false;
+
+      for (double t = t_proj; t <= candidate_t; t += t_step)
+      {
+        const Eigen::Vector3d pt = planner_manager_->global_data_.getPosition(t);
+        if (targetOccupancy(pt) != 0)
+          return false;
+      }
+
+      const Eigen::Vector3d candidate_pt = planner_manager_->global_data_.getPosition(candidate_t);
+      return targetOccupancy(candidate_pt) == 0;
+    };
+
+    const Eigen::Vector3d expected_target_pt = local_target_pt_;
+    const int expected_target_occ = targetOccupancy(expected_target_pt);
+    if (expected_target_occ != 0)
     {
       bool found_free_target = false;
       double adjusted_t = target_t;
+      Eigen::Vector3d adjusted_target = expected_target_pt;
+      const double min_useful_target_distance = 0.5;
 
-      for (double dt = 0.0; dt <= duration; dt += t_step)
+      for (double t = target_t; t >= std::max(0.0, t_proj); t -= t_step)
       {
-        double t_forward = target_t + dt;
-        if (t_forward <= duration)
-        {
-          Eigen::Vector3d pt = planner_manager_->global_data_.getPosition(t_forward);
-          if (targetOccupancy(pt) == 0)
-          {
-            local_target_pt_ = pt;
-            adjusted_t = t_forward;
-            found_free_target = true;
-            break;
-          }
-        }
+        Eigen::Vector3d pt = planner_manager_->global_data_.getPosition(t);
+        const double distance_from_start = (pt - start_pt_).norm();
+        if (distance_from_start < min_useful_target_distance)
+          continue;
 
-        double t_backward = target_t - dt;
-        if (t_backward >= std::max(0.0, t_proj))
+        if (targetOccupancy(pt) == 0 && referenceSegmentIsSafe(t))
         {
-          Eigen::Vector3d pt = planner_manager_->global_data_.getPosition(t_backward);
-          if (targetOccupancy(pt) == 0)
-          {
-            local_target_pt_ = pt;
-            adjusted_t = t_backward;
-            found_free_target = true;
-            break;
-          }
+          adjusted_target = pt;
+          adjusted_t = t;
+          found_free_target = true;
+          break;
         }
       }
 
       if (found_free_target)
       {
+        local_target_pt_ = adjusted_target;
+        const double fallback_distance = (expected_target_pt - local_target_pt_).norm();
         RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
-                             "Local target was adjusted to a nearby collision-free point");
+                             "Local target fallback: expected=[%.2f, %.2f, %.2f] occ=%d, "
+                             "selected=[%.2f, %.2f, %.2f], fallback_distance=%.2f m",
+                             expected_target_pt(0), expected_target_pt(1), expected_target_pt(2),
+                             expected_target_occ,
+                             local_target_pt_(0), local_target_pt_(1), local_target_pt_(2),
+                             fallback_distance);
         target_t = adjusted_t;
       }
       else
       {
         RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
-                             "Local target is in collision and no nearby free target was found");
+                             "Local target fallback failed: expected=[%.2f, %.2f, %.2f] occ=%d; "
+                             "no safe local target on reference trajectory toward robot",
+                             expected_target_pt(0), expected_target_pt(1), expected_target_pt(2),
+                             expected_target_occ);
       }
     }
 

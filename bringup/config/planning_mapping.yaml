@@ -21,8 +21,8 @@ planning:
 
   topics:
     goal_pose: "/goal_pose"
-    odom: "/lio/localization/odom"
-    sensor_pose: "/lio/localization/odom"
+    odom: "/lio/mapping/odom_body"
+    sensor_pose: "/lio/mapping/odom_body"
     cloud: "/lio/mapping/clouds_lidar"
     octomap: "/map_loader/octomap"
     global_path: "/global_planner/path"

@@ -17,7 +17,11 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(octomap REQUIRED)
+find_package(octomap_msgs REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 add_executable(global_planner_node
     src/global_planner_node.cpp
@@ -34,6 +38,10 @@ ament_target_dependencies(global_planner_node
     rclcpp
     geometry_msgs
     nav_msgs
+    octomap_msgs
+    tf2
+    tf2_geometry_msgs
+    tf2_ros
 )
 target_link_libraries(global_planner_node
     ${PCL_LIBRARIES}

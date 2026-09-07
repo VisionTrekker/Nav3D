@@ -4,7 +4,7 @@ if(POLICY CMP0077)
     cmake_policy(SET CMP0077 NEW)
 endif()
 
-project(lio_backup LANGUAGES C CXX)
+project(lio LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -64,7 +64,6 @@ set(LIO_ROS_DEPENDENCIES
     nav_msgs
     sensor_msgs
     std_msgs
-    pcl_ros
     pcl_conversions
     tf2_ros
     std_srvs
@@ -95,7 +94,7 @@ if(LIO_ROS_VERSION EQUAL 1)
         DEPENDS EIGEN3 PCL
         CATKIN_DEPENDS
             roscpp roslib std_msgs nav_msgs geometry_msgs sensor_msgs
-            pcl_ros pcl_conversions tf2_ros message_runtime rviz pluginlib
+            pcl_conversions tf2_ros message_runtime rviz pluginlib
     )
 else()
     find_package(ament_cmake REQUIRED)
@@ -107,16 +106,12 @@ else()
     find_package(nav_msgs REQUIRED)
     find_package(sensor_msgs REQUIRED)
     find_package(std_msgs REQUIRED)
-    find_package(pcl_ros REQUIRED)
     find_package(pcl_conversions REQUIRED)
     find_package(tf2_ros REQUIRED)
     find_package(std_srvs REQUIRED)
     find_package(pluginlib REQUIRED)
     find_package(rviz_common REQUIRED)
     find_package(livox_ros_driver2 REQUIRED)
-
-    # pcl_ros locates PCL again and repopulates this legacy variable.
-    list(REMOVE_ITEM PCL_LIBRARIES QHULL::QHULL)
 
     rosidl_generate_interfaces(${PROJECT_NAME}
         ${LIO_ROS2_MESSAGE_FILES}

@@ -57,6 +57,44 @@ Visualization Manager:
         {}
       Update Interval: 0
       Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Name: map_noelevator
+      Pose:
+        Position:
+          X: 0
+          Y: 0
+          Z: 0
+        Orientation:
+          X: 0
+          Y: 0
+          Z: 0
+          W: 1
+      Queue Size: 1
+      Size (Pixels): 2
+      Style: Points
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_loader/pcd_points
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: octomap_rviz_plugins/OccupancyMap
+      Enabled: true
+      Name: map_noelevator_octomap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_loader/octomap
+      Value: true
     - Alpha: 0.800000011920929
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255

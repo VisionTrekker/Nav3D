@@ -14,6 +14,7 @@ def _setup(context):
     bringup_share = get_package_share_directory("bringup")
     scan_share = get_package_share_directory("scan_planner")
     config_path = LaunchConfiguration("config").perform(context)
+    pcd_map_override = LaunchConfiguration("pcd_map_file").perform(context)
     if not config_path:
         config_path = os.path.join(bringup_share, "config", "planning.yaml")
     with open(config_path, "r", encoding="utf-8") as stream:
@@ -23,8 +24,37 @@ def _setup(context):
     global_cfg = config["global"]
     scan_cfg = config["scan"]
     safety_cfg = config["safety"]
+    pcd_map_file = pcd_map_override or global_cfg["pcd_map_file"]
     planner_yaml = os.path.join(scan_share, "config", "planner.yaml")
     controllers_yaml = os.path.join(scan_share, "config", "controllers.yaml")
+    global_planner_param_keys = [
+        "robot_radius",
+        "max_iterations",
+        "snap_search_radius_cells",
+        "require_ground_support",
+        "strict_direct_ground_support",
+        "ground_support_xy_radius_cells",
+        "ground_support_depth_cells",
+        "enable_preblocked_costmap",
+        "preblocked_costmap_radius_cells",
+        "preblocked_costmap_weight",
+        "lowest_traversable_only",
+    ]
+    global_planner_overrides = {
+        key: global_cfg[key]
+        for key in global_planner_param_keys
+        if key in global_cfg
+    }
+    map_loader_param_keys = [
+        "voxel_downsample_m",
+        "min_points_per_voxel",
+        "min_cluster_voxels",
+    ]
+    map_loader_overrides = {
+        key: global_cfg[key]
+        for key in map_loader_param_keys
+        if key in global_cfg
+    }
 
     scan_overrides = {
         "use_sim_time": False,
@@ -39,15 +69,33 @@ def _setup(context):
 
     return [
         Node(
+            package="map_loader",
+            executable="map_loader_node",
+            name="map_loader_node",
+            output="screen",
+            parameters=[{
+                "pcd_path": pcd_map_file,
+                "resolution": float(global_cfg["octomap_resolution"]),
+            }, map_loader_overrides],
+        ),
+        Node(
             package="global_planner",
             executable="global_planner_node",
             name="global_planner_node",
             output="screen",
             parameters=[{
-                "pcd_map_file": global_cfg["pcd_map_file"],
+                # Keep direct PCD loading available to the standalone global
+                # planner, while the formal Nav3D chain consumes Map Loader's
+                # transient-local OctoMap boundary.
+                "pcd_map_file": pcd_map_file,
                 "octomap_output_bt": global_cfg["octomap_output_bt"],
                 "max_endpoint_snap_distance": float(global_cfg["max_endpoint_snap_distance"]),
-            }],
+                "use_octomap_topic": True,
+                "octomap_topic": topics["octomap"],
+                "odom_topic": topics["odom"],
+                "goal_topic": topics["goal_pose"],
+                "path_topic": topics["global_path"],
+            }, global_planner_overrides],
         ),
         Node(
             package="scan_planner",
@@ -96,6 +144,11 @@ def generate_launch_description():
             "config",
             default_value="",
             description="Planning subsystem YAML config. Defaults to bringup/config/planning.yaml",
+        ),
+        DeclareLaunchArgument(
+            "pcd_map_file",
+            default_value="",
+            description="Optional PCD override shared by Map Loader and Global Planner",
         ),
         OpaqueFunction(function=_setup),
     ])

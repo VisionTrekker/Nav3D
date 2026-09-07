@@ -15,7 +15,7 @@ Visualization Manager:
       Name: LiDAR
       Enabled: true
       Topic:
-        Value: /LIO/clouds_lidar
+        Value: /lio/mapping/clouds_lidar
       Queue Size: 10
       Size (Pixels): 2
       Style: Points
@@ -23,7 +23,7 @@ Visualization Manager:
       Name: Global Map
       Enabled: true
       Topic:
-        Value: /LIO/global_map
+        Value: /lio/mapping/global_map
       Queue Size: 2
       Size (Pixels): 1
       Style: Points
@@ -38,7 +38,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
-    Fixed Frame: world
+    Fixed Frame: odom
     Frame Rate: 30
   Name: root
   Tools:

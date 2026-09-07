@@ -9,13 +9,16 @@ find_package(geometry_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(OpenCV REQUIRED)
 add_library(sc_manager_lib STATIC src/SCManager.cpp)
 target_include_directories(sc_manager_lib PUBLIC
   include
   ${PCL_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 ament_target_dependencies(sc_manager_lib rclcpp nav_msgs sensor_msgs geometry_msgs pcl_conversions PCL Eigen3)
+target_link_libraries(sc_manager_lib ${OpenCV_LIBS})
 add_executable(scan_context_loop_node src/scan_context_loop_node.cpp)
 target_link_libraries(scan_context_loop_node sc_manager_lib)
 ament_target_dependencies(scan_context_loop_node rclcpp nav_msgs sensor_msgs geometry_msgs pcl_conversions PCL Eigen3)
@@ -25,4 +28,5 @@ if(BUILD_TESTING)
   target_link_libraries(test_scan_context sc_manager_lib)
 endif()
 install(TARGETS scan_context_loop_node DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY launch DESTINATION share/${PROJECT_NAME}/)
 ament_package()

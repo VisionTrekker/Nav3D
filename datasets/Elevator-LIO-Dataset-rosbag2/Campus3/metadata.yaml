@@ -1,0 +1,46 @@
+rosbag2_bagfile_information:
+  compression_format: ''
+  compression_mode: ''
+  custom_data: null
+  duration:
+    nanoseconds: 137859166515
+  files:
+  - duration:
+      nanoseconds: 137859166515
+    message_count: 34469
+    path: Campus3.db3
+    starting_time:
+      nanoseconds_since_epoch: 1775104911541840698
+  message_count: 34469
+  relative_file_paths:
+  - Campus3.db3
+  ros_distro: rosbags
+  starting_time:
+    nanoseconds_since_epoch: 1775104911541840698
+  storage_identifier: sqlite3
+  topics_with_message_count:
+  - message_count: 6894
+    topic_metadata:
+      name: /livox/lidar
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: livox_ros_driver2/msg/CustomMsg
+      type_description_hash: 
+        RIHS01_2eb17e5e35bf5a2d6cd079f3c57f33abf95e5bf7d71b42cddc05daace73d815a
+  - message_count: 27574
+    topic_metadata:
+      name: /livox/imu
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: sensor_msgs/msg/Imu
+      type_description_hash: 
+        RIHS01_7d9a00ff131080897a5ec7e26e315954b8eae3353c3f995c55faf71574000b5b
+  - message_count: 1
+    topic_metadata:
+      name: /LIO/set_elevator_flag
+      offered_qos_profiles: ''
+      serialization_format: cdr
+      type: std_msgs/msg/Bool
+      type_description_hash: 
+        RIHS01_feb91e995ff9ebd09c0cb3d2aed18b11077585839fb5db80193b62d74528f6c9
+  version: 8

@@ -16,6 +16,32 @@ namespace global_planner
         printf("GlobalPlanner Destructure!!! \n");
     }
 
+    void GlobalPlanner::configurePlanningParameters(
+        double robot_radius,
+        int max_iterations,
+        int snap_search_radius_cells,
+        bool require_ground_support,
+        bool strict_direct_ground_support,
+        int ground_support_xy_radius_cells,
+        int ground_support_depth_cells,
+        bool enable_preblocked_costmap,
+        int preblocked_costmap_radius_cells,
+        double preblocked_costmap_weight,
+        bool lowest_traversable_only)
+    {
+        robot_radius_ = robot_radius;
+        max_iterations_ = max_iterations;
+        snap_search_radius_cells_ = snap_search_radius_cells;
+        require_ground_support_ = require_ground_support;
+        strict_direct_ground_support_ = strict_direct_ground_support;
+        ground_support_xy_radius_cells_ = ground_support_xy_radius_cells;
+        ground_support_depth_cells_ = ground_support_depth_cells;
+        enable_preblocked_costmap_ = enable_preblocked_costmap;
+        preblocked_costmap_radius_cells_ = preblocked_costmap_radius_cells;
+        preblocked_costmap_weight_ = preblocked_costmap_weight;
+        lowest_traversable_only_ = lowest_traversable_only;
+    }
+
     void GlobalPlanner::setOctomap(std::shared_ptr<octomap::OcTree> map)
     {
         if (!map)

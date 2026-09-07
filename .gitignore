@@ -55,3 +55,6 @@ CATKIN_IGNORE
 # superpowers design docs and tool state
 .superpowers/
 docs/superpowers/
+
+# datasets
+datasets/

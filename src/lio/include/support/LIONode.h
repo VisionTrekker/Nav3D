@@ -111,7 +111,6 @@ private:
     lio_ros::Timer timer_10HZ_;
     lio_ros::Timer timer_1HZ_;
     lio_ros::Subscription elevator_flag_sub_;
-    lio_ros::Publisher<lio_ros::Bool> ele_state_pub_;
 
     void elevatorFlagCallback(const lio_ros::BoolConstPtr& msg);
 
