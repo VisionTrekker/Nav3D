@@ -47,151 +47,307 @@ Visualization Manager:
       Plane Cell Count: 100
       Reference Frame: <Fixed Frame>
       Value: true
-    - Class: rviz_default_plugins/TF
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 1
+          Buffer Length: 1
+          Class: rviz_default_plugins/Path
+          Color: 25; 255; 0
+          Enabled: true
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.30000001192092896
+          Length: 0.30000001192092896
+          Line Style: Lines
+          Line Width: 0.029999999329447746
+          Name: SLAM Trajectory
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose:
+            Position:
+              X: 0
+              Y: 0
+              Z: 0
+            Orientation:
+              X: 0
+              Y: 0
+              Z: 0
+              W: 1
+          Queue Size: 50
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 50
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lio_mapping/path_topic_name
+          Value: true
+        - Alpha: 1
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 60; 60
+          Color Transformer: FlatColor
+          Decay Time: 0.30000001192092896
+          Enabled: true
+          Name: Current LIO Cloud
+          Position Transformer: XYZ
+          Queue Size: 10
+          Selectable: true
+          Size (Pixels): 2
+          Size (m): 0.019999999552965164
+          Style: Points
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /lio/mapping/clouds_lidar
+          Use Fixed Frame: true
+          Value: true
+        - Alpha: 0.800000011920929
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: Intensity
+          Decay Time: 0
+          Enabled: true
+          Name: Global Map
+          Pose:
+            Position:
+              X: 0
+              Y: 0
+              Z: 0
+            Orientation:
+              X: 0
+              Y: 0
+              Z: 0
+              W: 1
+          Position Transformer: XYZ
+          Queue Size: 10
+          Selectable: true
+          Size (Pixels): 2
+          Style: Points
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lio/mapping/global_map
+          Use Fixed Frame: true
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: KDTree Markers
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lio/mapping/ikdtree
+          Value: true
       Enabled: true
-      Name: TF
-      Show Arrows: true
-      Show Axes: true
-      Show Names: true
-      Tree:
-        {}
-      Update Interval: 0
-      Value: true
-    - Alpha: 1
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
+      Name: Mapping / LIO
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 1
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 255
+          Color Transformer: Intensity
+          Decay Time: 0
+          Enabled: true
+          Name: map_noelevator
+          Position Transformer: XYZ
+          Queue Size: 1
+          Selectable: true
+          Size (Pixels): 2
+          Style: Points
+          Topic:
+            Depth: 1
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /map_loader/pcd_points
+          Use Fixed Frame: true
+          Value: true
+        - Alpha: 0.699999988079071
+          Class: octomap_rviz_plugins/OccupancyMap
+          Enabled: true
+          Name: map_noelevator_octomap
+          Topic:
+            Depth: 1
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /map_loader/octomap
+          Value: true
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Color: 255; 214; 10
+          Enabled: true
+          Keep: 10
+          Name: Localization Pose
+          Position Tolerance: 0.10000000149011612
+          Shape: Axes
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lio/localization/odom
+          Value: true
       Enabled: true
-      Name: map_noelevator
-      Pose:
-        Position:
-          X: 0
-          Y: 0
-          Z: 0
-        Orientation:
-          X: 0
-          Y: 0
-          Z: 0
-          W: 1
-      Queue Size: 1
-      Size (Pixels): 2
-      Style: Points
-      Topic:
-        Depth: 1
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map_loader/pcd_points
-      Value: true
-    - Alpha: 0.699999988079071
-      Class: octomap_rviz_plugins/OccupancyMap
+      Name: Localization
+    - Class: rviz_common/Group
+      Displays:
+        - Alpha: 1
+          Buffer Length: 1
+          Class: rviz_default_plugins/Path
+          Color: 25; 255; 0
+          Enabled: true
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.30000001192092896
+          Length: 0.30000001192092896
+          Line Style: Lines
+          Line Width: 0.029999999329447746
+          Name: Global Path
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose:
+            Position:
+              X: 0
+              Y: 0
+              Z: 0
+            Orientation:
+              X: 0
+              Y: 0
+              Z: 0
+              W: 1
+          Queue Size: 100
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /global_planner/path
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Local Optimized Trajectory
+          Namespaces:
+            {}
+          Topic:
+            Depth: 20
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /optimal_list
+          Value: true
+        - Alpha: 1
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 220; 0
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: true
+          Name: Raw Occupancy Voxels
+          Position Transformer: XYZ
+          Queue Size: 5
+          Selectable: true
+          Size (Pixels): 2
+          Size (m): 0.05000000074505806
+          Style: Boxes
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /grid_map/occupancy
+          Use Fixed Frame: true
+          Value: true
+        - Alpha: 0.6000000238418579
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 80; 0
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Name: Inflated Occupancy Voxels
+          Position Transformer: XYZ
+          Queue Size: 5
+          Selectable: true
+          Size (Pixels): 2
+          Size (m): 0.05000000074505806
+          Style: Boxes
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /grid_map/occupancy_inflate
+          Use Fixed Frame: true
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Sliding Map Bounds
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /grid_map/sliding_map_bbox
+          Value: true
+        - Alpha: 1
+          Class: rviz_default_plugins/PointCloud2
+          Color: 80; 180; 255
+          Color Transformer: FlatColor
+          Decay Time: 0.20000000298023224
+          Enabled: false
+          Name: Planner Sensor Cloud
+          Position Transformer: XYZ
+          Queue Size: 10
+          Selectable: true
+          Size (Pixels): 2
+          Size (m): 0.019999999552965164
+          Style: Points
+          Topic:
+            Depth: 10
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /local_planner/sim_cloud
+          Use Fixed Frame: true
+          Value: true
       Enabled: true
-      Name: map_noelevator_octomap
-      Topic:
-        Depth: 1
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map_loader/octomap
-      Value: true
-    - Alpha: 0.800000011920929
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: Intensity
-      Decay Time: 0
+      Name: Local Planner
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_default_plugins/TF
+          Enabled: false
+          Name: TF (all frames)
+          Show Arrows: false
+          Show Axes: false
+          Show Names: false
+          Tree:
+            {}
+          Update Interval: 0
+          Value: true
+        - Alpha: 1
+          Class: rviz_default_plugins/Axes
+          Enabled: false
+          Length: 0.4000000059604645
+          Name: Base Link Axes
+          Radius: 0.029999999329447746
+          Reference Frame: base_link
+          Show Trail: false
+          Value: true
       Enabled: true
-      Name: Global Map
-      Pose:
-        Position:
-          X: 0
-          Y: 0
-          Z: 0
-        Orientation:
-          X: 0
-          Y: 0
-          Z: 0
-          W: 1
-      Queue Size: 10
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /lio/mapping/global_map
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: KDTree Markers
-      Namespace: /lio/mapping/ikdtree
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /lio/mapping/ikdtree
-      Value: true
-    - Alpha: 1
-      Class: rviz_default_plugins/Path
-      Color: 25; 255; 0
-      Enabled: true
-      Head Diameter: 0.30000001192092896
-      Head Length: 0.30000001192092896
-      Length: 0.30000001192092896
-      Line Style: Lines
-      Line Width: 0.029999999329447746
-      Name: Global Planner Path
-      Offset:
-        X: 0
-        Y: 0
-        Z: 0
-      Pose:
-        Position:
-          X: 0
-          Y: 0
-          Z: 0
-        Orientation:
-          X: 0
-          Y: 0
-          Z: 0
-          W: 1
-      Queue Size: 100
-      Shaft Diameter: 0.10000000149011612
-      Shaft Length: 0.10000000149011612
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /global_planner/path
-      Value: true
-    - Angle Tolerance: 0.10000000149011612
-      Class: rviz_default_plugins/Odometry
-      Color: 255; 214; 10
-      Enabled: true
-      Keep: 100
-      Name: Local Closed-Loop Odom
-      Position Tolerance: 0.10000000149011612
-      Shape: Axes
-      Topic:
-        Depth: 10
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /local_planner/sim_odom
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: SCAN Sliding Window
-      Namespaces:
-        {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /grid_map/sliding_map_bbox
-      Value: true
+      Name: Debug Frames
     - Class: rviz_default_plugins/InteractiveMarkers
       Enable Transparency: true
       Enabled: true
