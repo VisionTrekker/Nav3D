@@ -77,6 +77,19 @@ public:
 
   void setOctomap(std::shared_ptr<octomap::OcTree> map);
 
+  void configurePlanningParameters(
+    double robot_radius,
+    int max_iterations,
+    int snap_search_radius_cells,
+    bool require_ground_support,
+    bool strict_direct_ground_support,
+    int ground_support_xy_radius_cells,
+    int ground_support_depth_cells,
+    bool enable_preblocked_costmap,
+    int preblocked_costmap_radius_cells,
+    double preblocked_costmap_weight,
+    bool lowest_traversable_only);
+
   void makePlan(const PointPose start,const PointPose goal);
 
   void getPlannerResults(std::vector<PointPose>& plannerResults);

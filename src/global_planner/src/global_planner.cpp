@@ -16,6 +16,32 @@ namespace global_planner
         printf("GlobalPlanner Destructure!!! \n");
     }
 
+    void GlobalPlanner::configurePlanningParameters(
+        double robot_radius,
+        int max_iterations,
+        int snap_search_radius_cells,
+        bool require_ground_support,
+        bool strict_direct_ground_support,
+        int ground_support_xy_radius_cells,
+        int ground_support_depth_cells,
+        bool enable_preblocked_costmap,
+        int preblocked_costmap_radius_cells,
+        double preblocked_costmap_weight,
+        bool lowest_traversable_only)
+    {
+        robot_radius_ = robot_radius;
+        max_iterations_ = max_iterations;
+        snap_search_radius_cells_ = snap_search_radius_cells;
+        require_ground_support_ = require_ground_support;
+        strict_direct_ground_support_ = strict_direct_ground_support;
+        ground_support_xy_radius_cells_ = ground_support_xy_radius_cells;
+        ground_support_depth_cells_ = ground_support_depth_cells;
+        enable_preblocked_costmap_ = enable_preblocked_costmap;
+        preblocked_costmap_radius_cells_ = preblocked_costmap_radius_cells;
+        preblocked_costmap_weight_ = preblocked_costmap_weight;
+        lowest_traversable_only_ = lowest_traversable_only;
+    }
+
     void GlobalPlanner::setOctomap(std::shared_ptr<octomap::OcTree> map)
     {
         if (!map)
@@ -580,34 +606,102 @@ namespace global_planner
         1, static_cast<int>(preblocked_costmap_radius_cells_));
         const double denom = static_cast<double>(radius_cells) + 1.0;
 
-        for (const auto & c : preblocked_cells_) {
+        struct NeighborOffset
+        {
+        int dx;
+        int dy;
+        int dz;
+        int distance_squared;
+        double distance;
+        };
+
+        std::vector<NeighborOffset> offsets;
+        offsets.reserve(static_cast<std::size_t>(
+            (2 * radius_cells + 1) * (2 * radius_cells + 1) *
+            (2 * radius_cells + 1) - 1));
         for (int dx = -radius_cells; dx <= radius_cells; ++dx) {
-            for (int dy = -radius_cells; dy <= radius_cells; ++dy) {
+        for (int dy = -radius_cells; dy <= radius_cells; ++dy) {
             for (int dz = -radius_cells; dz <= radius_cells; ++dz) {
-                if (dx == 0 && dy == 0 && dz == 0) {
+            if (dx == 0 && dy == 0 && dz == 0) {
                 continue;
-                }
-                const GridIndex n{c.x + dx, c.y + dy, c.z + dz};
-                if (!isInsideMetricBounds(n)) {
-                continue;
-                }
-                if (traversable_cells_.find(n) == traversable_cells_.end()) {
-                continue;
-                }
-                if (preblocked_cells_.find(n) != preblocked_cells_.end()) {
-                continue;
-                }
-                const double d = std::sqrt(
-                static_cast<double>(dx * dx + dy * dy + dz * dz));
-                if (d > static_cast<double>(radius_cells)) {
-                continue;
-                }
-                const double cst = std::max(0.0, (denom - d) / denom);
-                auto it = preblocked_costmap_.find(n);
-                if (it == preblocked_costmap_.end() || cst > it->second) {
-                preblocked_costmap_[n] = cst;
-                }
             }
+            const int distance_squared = dx * dx + dy * dy + dz * dz;
+            offsets.push_back(NeighborOffset{
+                dx, dy, dz, distance_squared, std::sqrt(static_cast<double>(distance_squared))});
+            }
+        }
+        }
+
+        double min_x, min_y, min_z, max_x, max_y, max_z;
+        octree_->getMetricMin(min_x, min_y, min_z);
+        octree_->getMetricMax(max_x, max_y, max_z);
+        const double resolution = octree_->getResolution();
+
+        const auto minimumGridIndex =
+        [](double world_value, double min_value, double max_value, double cell_size) {
+        int index = static_cast<int>(std::floor(world_value / cell_size)) - 2;
+        while (!((static_cast<float>((static_cast<double>(index) + 0.5) * cell_size) >=
+            static_cast<float>(min_value)) &&
+            (static_cast<float>((static_cast<double>(index) + 0.5) * cell_size) <=
+            static_cast<float>(max_value))))
+        {
+            ++index;
+        }
+        return index;
+        };
+
+        const auto maximumGridIndex =
+        [](double world_value, double min_value, double max_value, double cell_size) {
+        int index = static_cast<int>(std::ceil(world_value / cell_size)) + 2;
+        while (!((static_cast<float>((static_cast<double>(index) + 0.5) * cell_size) >=
+            static_cast<float>(min_value)) &&
+            (static_cast<float>((static_cast<double>(index) + 0.5) * cell_size) <=
+            static_cast<float>(max_value))))
+        {
+            --index;
+        }
+        return index;
+        };
+
+        const GridIndex min_grid{
+        minimumGridIndex(min_x, min_x, max_x, resolution),
+        minimumGridIndex(min_y, min_y, max_y, resolution),
+        minimumGridIndex(min_z, min_z, max_z, resolution)};
+        const GridIndex max_grid{
+        maximumGridIndex(max_x, min_x, max_x, resolution),
+        maximumGridIndex(max_y, min_y, max_y, resolution),
+        maximumGridIndex(max_z, min_z, max_z, resolution)};
+
+        const auto inGridBounds = [&min_grid, &max_grid](const GridIndex & idx) {
+        return idx.x >= min_grid.x && idx.x <= max_grid.x &&
+            idx.y >= min_grid.y && idx.y <= max_grid.y &&
+            idx.z >= min_grid.z && idx.z <= max_grid.z;
+        };
+
+        const int radius_squared = radius_cells * radius_cells;
+        for (const auto & target : traversable_cells_) {
+        if (!inGridBounds(target)) {
+            continue;
+        }
+        if (preblocked_cells_.find(target) != preblocked_cells_.end()) {
+            continue;
+        }
+
+        for (const auto & offset : offsets) {
+            if (offset.distance_squared > radius_squared) {
+            continue;
+            }
+
+            const GridIndex source{
+            target.x + offset.dx, target.y + offset.dy, target.z + offset.dz};
+            if (preblocked_cells_.find(source) == preblocked_cells_.end()) {
+            continue;
+            }
+
+            const double cst = std::max(0.0, (denom - offset.distance) / denom);
+            auto it = preblocked_costmap_.find(target);
+            if (it == preblocked_costmap_.end() || cst > it->second) {
+            preblocked_costmap_[target] = cst;
             }
         }
         }

@@ -127,26 +127,6 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /global_planner/path
       Value: true
-    - Class: rviz_default_plugins/TwistStamped
-      Enabled: true
-      Name: Cmd Vel
-      Scale:
-        Alpha: 1
-        Axis Length: 1
-        Axis Radius: 0.10000000149011612
-        Color: 255; 255; 255
-        Head Length: 0.30000001192092896
-        Head Radius: 0.30000001192092896
-        Shaft Length: 0.10000000149011612
-        Shaft Radius: 0.10000000149011612
-        Value: Arrow
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /local_planner/cmd_vel
-      Value: true
     - Class: rviz_default_plugins/InteractiveMarkers
       Enable Transparency: true
       Enabled: true

@@ -1,0 +1,26 @@
+localization_composer:
+  ros__parameters:
+    raw_odom_history_size: 500
+    correction_timestamp_tolerance: 0.15
+    planar_initial_alignment: true
+    max_map_to_odom_translation_jump: 0.5
+    max_map_to_odom_rotation_jump_degrees: 15.0
+
+fixed_map_icp:
+  ros__parameters:
+    # The launch file overrides this with its map argument. Absolute paths and
+    # package://<package>/<relative-path> URIs are accepted.
+    map_path: ''
+    voxel_size: 0.30
+    max_correspondence_distance: 1.0
+    max_iterations: 100
+    convergence_criterion: 0.0001
+    kernel: 0.5
+    fitness_threshold: 0.35
+    min_correspondences: 100
+    max_translation_jump: 0.30
+    max_rotation_jump_degrees: 10.0
+    max_points_per_voxel: 20
+    every_n_frames: 5
+    sync_queue_size: 30
+    sync_slop: 0.10

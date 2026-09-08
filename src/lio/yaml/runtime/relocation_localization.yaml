@@ -26,16 +26,17 @@ map:
     initial_voxel_size: 0.05 # 初始地图单帧轻度去重体素 [m]
 
 relocation:
-  relocation_enable: true
-  pcd_load_name: ""  # no PCD pre-load in localization mode — uses live scan context
-# relocalization sub-keys below are consumed by scan_context_loop node (Task 10),
-# not by lio binary — lio only reads relocation.relocation_enable from this section:
-  scan_context_topic: "/lio/localization/scan_to_map_pose"
-  loop_closure_topic: "/scan_context_loop/loop_closure"
-  score_threshold: 0.3
-  fall_back_to_initialpose: true
+  # Fixed-map localization is owned by lio_localization. Elevator-LIO must
+  # continue building its local odometry map instead of entering the legacy
+  # empty-PCD relocation mode.
+  relocation_enable: false
+  pcd_load_name: ""  # global localization is provided outside Elevator-LIO
+  # Scan Context is an independent optional online diagnostic node. Its
+  # topics and thresholds are not Elevator-LIO parameters and are configured
+  # by the Scan Context launch/node boundary when that node is explicitly enabled.
 elevator:
   enable: false
+  self_exit_detector: false
 
 pcd_save:
   global_map_save_enable: false # 退出时保存全局点云 [ 只在未开启重定位时有效 ]

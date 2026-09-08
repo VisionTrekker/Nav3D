@@ -133,8 +133,6 @@ LIONode::LIONode(std::shared_ptr<lio_ros::Node> node)
     elevator_flag_sub_ = node_->subscribe<lio_ros::Bool>(
         elevator_flag_topic_name, 1,
         [this](const lio_ros::BoolConstPtr& msg) { elevatorFlagCallback(msg); });
-    /****** Elevator Publish ******/
-    ele_state_pub_ = node_->advertise<lio_ros::Bool>("/LIO/in_elevator", 1, true);
 }
 
 

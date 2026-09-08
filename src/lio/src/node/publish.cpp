@@ -13,11 +13,38 @@ extern PointCloudXYZI::Ptr map_world;
 extern std::shared_ptr<EskfEstimator> p_eskf_estimator;
 extern vector<string> incremental_paths;
 
+namespace {
+
+Eigen::Isometry3d makeBodyTLidar() {
+    Eigen::Isometry3d lidar_T_body = Eigen::Isometry3d::Identity();
+    lidar_T_body.linear() = lidar_R_body;
+    lidar_T_body.translation() = lidar_t_body;
+    return lidar_T_body.inverse();
+}
+
+bool valid_output_state(const State &state, double stamp_sec) {
+    const double quaternion_norm = state.q.norm();
+    return std::isfinite(stamp_sec) &&
+           state.p.allFinite() &&
+           state.v.allFinite() &&
+           std::isfinite(state.z) &&
+           state.q.coeffs().allFinite() &&
+           std::isfinite(quaternion_norm) &&
+           quaternion_norm > 1.0e-12;
+}
+
+}  // namespace
+
 /********************************************** Publish Function **********************************************/
 
 void LIONode::publish_imu_odometry(State state, double stamp_sec) {
-    lio_ros::Odometry odom_imu;
     const double odom_stamp = stamp_sec >= 0.0 ? stamp_sec : lidar_end_time;
+    if (!valid_output_state(state, odom_stamp)) {
+        LOG_ERROR(Sensor, "skip IMU odometry/trajectory publication: state or timestamp is NaN/Inf/invalid");
+        return;
+    }
+
+    lio_ros::Odometry odom_imu;
     // odom.header.stamp = ros::Time::now();  // 使用 ROS 1 的时间戳
     odom_imu.header.stamp = get_ros_time(odom_stamp);
     odom_imu.header.frame_id = FRAME_PARENT_ID;
@@ -60,27 +87,19 @@ void LIONode::publish_imu_odometry(State state, double stamp_sec) {
 
     odom_path_pub_.publish(odom_path);
 
-    // 发布tf变换
-    lio_ros::TransformStamped trans;
-    trans.header.frame_id = FRAME_PARENT_ID;
-    trans.header.stamp = odom_imu.header.stamp;
-    trans.child_frame_id = FRAME_IMU_ID;
-    trans.transform.translation.x = odom_imu.pose.pose.position.x;
-    trans.transform.translation.y = odom_imu.pose.pose.position.y;
-    trans.transform.translation.z = odom_imu.pose.pose.position.z;
-    trans.transform.rotation.w = odom_imu.pose.pose.orientation.w;
-    trans.transform.rotation.x = odom_imu.pose.pose.orientation.x;
-    trans.transform.rotation.y = odom_imu.pose.pose.orientation.y;
-    trans.transform.rotation.z = odom_imu.pose.pose.orientation.z;
-    tf_broadcaster_->sendTransform(trans);
 }
 
 void LIONode::publish_body_odometry(State state, double stamp_sec) {
-    lio_ros::Odometry odom_body;
     const double odom_stamp = stamp_sec >= 0.0 ? stamp_sec : lidar_end_time;
+    if (!valid_output_state(state, odom_stamp)) {
+        LOG_ERROR(Sensor, "skip body odometry/TF publication: state or timestamp is NaN/Inf/invalid");
+        return;
+    }
+
+    lio_ros::Odometry odom_body;
     odom_body.header.stamp = get_ros_time(odom_stamp);
     odom_body.header.frame_id = FRAME_PARENT_ID;
-    odom_body.child_frame_id = FRAME_IMU_ID;
+    odom_body.child_frame_id = FRAME_BODY_ID;
 
     // 将位姿从雷达中心转换到小车中心
     Eigen::Matrix4d imu_T_lidar = Eigen::Matrix4d::Identity();
@@ -96,6 +115,13 @@ void LIONode::publish_body_odometry(State state, double stamp_sec) {
     Eigen::Matrix4d world_T_body = world_T_imu * imu_T_lidar * lidar_T_body;
     Eigen::Quaterniond body_q = Eigen::Quaterniond(world_T_body.block<3, 3>(0, 0));
     Eigen::Vector3d body_p = world_T_body.block<3, 1>(0, 3);
+    if (!body_p.allFinite() ||
+        !body_q.coeffs().allFinite() ||
+        !std::isfinite(body_q.norm()) ||
+        body_q.norm() <= 1.0e-12) {
+        LOG_ERROR(Sensor, "skip body odometry/TF publication: transformed pose is NaN/Inf/invalid");
+        return;
+    }
     odom_body.pose.pose.position.x = body_p(0);
     odom_body.pose.pose.position.y = body_p(1);
     odom_body.pose.pose.position.z = body_p(2);
@@ -106,6 +132,13 @@ void LIONode::publish_body_odometry(State state, double stamp_sec) {
 
     if (state.in_elevator) {
         odom_body.pose.pose.position.z += state.z;
+    }
+
+    if (!std::isfinite(odom_body.pose.pose.position.x) ||
+        !std::isfinite(odom_body.pose.pose.position.y) ||
+        !std::isfinite(odom_body.pose.pose.position.z)) {
+        LOG_ERROR(Sensor, "skip body odometry/TF publication: final position is NaN/Inf");
+        return;
     }
 
     odom_body_pub_.publish(odom_body);
@@ -126,15 +159,28 @@ void LIONode::publish_body_odometry(State state, double stamp_sec) {
 }
 
 void LIONode::publish_Dedistort_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
-    auto Dedistort_clouds_world = p_eskf_estimator -> transLidar2World(*cloud);
     static int publish_frame_counter = 0;
     ++publish_frame_counter;
     if (clouds_lidar_pub_every_n > 1 && (publish_frame_counter % clouds_lidar_pub_every_n) != 0) {
         return;
     }
+
+    // The pipeline provides a dedistorted cloud in the LiDAR frame at scan end.
+    // Transform only this publication copy into the robot body frame; do not
+    // mutate the estimator input or route the cloud through the world frame.
+    const Eigen::Isometry3d body_T_lidar = makeBodyTLidar();
+    PointCloudXYZI::Ptr dedistort_clouds_body(new PointCloudXYZI(*cloud));
+    for (auto &point : dedistort_clouds_body->points) {
+        const Eigen::Vector3d point_lidar(point.x, point.y, point.z);
+        const Eigen::Vector3d point_body = body_T_lidar * point_lidar;
+        point.x = static_cast<float>(point_body.x());
+        point.y = static_cast<float>(point_body.y());
+        point.z = static_cast<float>(point_body.z());
+    }
+
     lio_ros::PointCloud2 cloud_msg;
-    pcl::toROSMsg(*Dedistort_clouds_world, cloud_msg);
-    cloud_msg.header.frame_id = FRAME_PARENT_ID;
+    pcl::toROSMsg(*dedistort_clouds_body, cloud_msg);
+    cloud_msg.header.frame_id = FRAME_BODY_ID;
     // cloud_msg.header.stamp = ros::Time::now();
     cloud_msg.header.stamp = get_ros_time(lidar_end_time);
     clouds_lidar_pub_.publish(cloud_msg);
@@ -159,16 +205,18 @@ void LIONode::publish_Rejected_clouds_lidar(const PointCloudXYZI::Ptr &cloud) {
 }
 
 /**
- * @brief 发布 IMU 系到 lidar 系的静态 tf 变换
+ * @brief 发布 robot body 系到 lidar 系的静态 tf 变换
  */
 void LIONode::publishStaticTransform() {
+    const Eigen::Isometry3d body_T_lidar = makeBodyTLidar();
     lio_ros::TransformStamped trans;
-    trans.header.frame_id = FRAME_IMU_ID;
+    trans.header.frame_id = FRAME_BODY_ID;
     // trans.header.stamp = ros::Time::now();
     trans.header.stamp = get_ros_time(lidar_end_time);
     trans.child_frame_id = FRAME_LIDAR_ID;
-    Eigen::Vector3d t (imu_t_lidar);
-    Eigen::Quaterniond q (imu_R_lidar);
+    const Eigen::Vector3d t = body_T_lidar.translation();
+    Eigen::Quaterniond q(body_T_lidar.rotation());
+    q.normalize();
     trans.transform.translation.x = t(0);
     trans.transform.translation.y = t(1);
     trans.transform.translation.z = t(2);

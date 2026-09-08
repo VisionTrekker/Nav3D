@@ -57,6 +57,44 @@ Visualization Manager:
         {}
       Update Interval: 0
       Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Name: map_noelevator
+      Pose:
+        Position:
+          X: 0
+          Y: 0
+          Z: 0
+        Orientation:
+          X: 0
+          Y: 0
+          Z: 0
+          W: 1
+      Queue Size: 1
+      Size (Pixels): 2
+      Style: Points
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_loader/pcd_points
+      Value: true
+    - Alpha: 0.699999988079071
+      Class: octomap_rviz_plugins/OccupancyMap
+      Enabled: true
+      Name: map_noelevator_octomap
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /map_loader/octomap
+      Value: true
     - Alpha: 0.800000011920929
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
@@ -127,25 +165,32 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /global_planner/path
       Value: true
-    - Class: rviz_default_plugins/TwistStamped
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz_default_plugins/Odometry
+      Color: 255; 214; 10
       Enabled: true
-      Name: Cmd Vel
-      Scale:
-        Alpha: 1
-        Axis Length: 1
-        Axis Radius: 0.10000000149011612
-        Color: 255; 255; 255
-        Head Length: 0.30000001192092896
-        Head Radius: 0.30000001192092896
-        Shaft Length: 0.10000000149011612
-        Shaft Radius: 0.10000000149011612
-        Value: Arrow
+      Keep: 100
+      Name: Local Closed-Loop Odom
+      Position Tolerance: 0.10000000149011612
+      Shape: Axes
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_planner/sim_odom
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: SCAN Sliding Window
+      Namespaces:
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /local_planner/cmd_vel
+        Value: /grid_map/sliding_map_bbox
       Value: true
     - Class: rviz_default_plugins/InteractiveMarkers
       Enable Transparency: true
