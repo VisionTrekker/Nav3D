@@ -116,7 +116,9 @@ def generate_launch_description():
                 '--qx', '0', '--qy', '0', '--qz', '0', '--qw', '1',
                 '--frame-id', 'map', '--child-frame-id', 'odom',
             ],
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'false'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'false' and '", mode, "' != 'sim'"
+            ])),
         ),
 
         # unitree_go2w driver (onboard-OrinNX ONLY; package absent from dev tree,
@@ -138,7 +140,9 @@ def generate_launch_description():
             output='screen',
             parameters=[{'config_path': lio_mapping_config}],
             remappings=lio_mapping_remaps(),
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'false'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'false' and '", mode, "' != 'sim'"
+            ])),
         ),
 
         # LIO localization (use_localization == true)
@@ -149,7 +153,9 @@ def generate_launch_description():
             output='screen',
             parameters=[{'config_path': lio_localization_config}],
             remappings=lio_localization_remaps(),
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'true'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'true' and '", mode, "' != 'sim'"
+            ])),
         ),
 
         # Localization boundary: owns the dynamic map -> odom transform and
@@ -161,7 +167,9 @@ def generate_launch_description():
             name='localization_composer',
             output='screen',
             parameters=[localization_icp_yaml],
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'true'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'true' and '", mode, "' != 'sim'"
+            ])),
         ),
 
         # Optional deterministic initialization for bag/field bringup.  The
@@ -174,7 +182,9 @@ def generate_launch_description():
             output='screen',
             parameters=[{'map_pose': initialpose}],
             condition=IfCondition(PythonExpression([
-                "'", use_loc, "' == 'true' and '", auto_initialpose, "' == 'true'"])),
+                "'", use_loc, "' == 'true' and '", mode, "' != 'sim' and '",
+                auto_initialpose, "' == 'true'"
+            ])),
         ),
 
         # Fixed-PCD refinement publishes pose measurements only.  The composer
@@ -185,7 +195,9 @@ def generate_launch_description():
             name='fixed_map_icp',
             output='screen',
             parameters=[localization_icp_yaml, {'map_path': map_arg}],
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'true'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'true' and '", mode, "' != 'sim'"
+            ])),
         ),
 
         # Scan context loop closure
@@ -220,7 +232,9 @@ def generate_launch_description():
                 'config': planning_mapping_yaml,
                 'pcd_map_file': map_arg,
             }.items(),
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'false'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'false' and '", mode, "' != 'sim'"
+            ])),
         ),
 
         # Formal navigation mode consumes the composer's true map -> base_link
@@ -231,7 +245,9 @@ def generate_launch_description():
                 'config': planning_localization_yaml,
                 'pcd_map_file': map_arg,
             }.items(),
-            condition=IfCondition(PythonExpression(["'", use_loc, "' == 'true'"])),
+            condition=IfCondition(PythonExpression([
+                "'", use_loc, "' == 'true' or '", mode, "' == 'sim'"
+            ])),
         ),
 
         # Rviz2 after 2 s warm-up

@@ -22,10 +22,17 @@ WORKSPACE="/home/nhy/code/vscode/Nav3D"
 BAG_PATH="$WORKSPACE/datasets/Elevator-LIO-Dataset-rosbag2/Campus3"
 MAP_PATH="$WORKSPACE/maps/campus3_no_elevator.pcd"
 CMD_VEL_TOPIC="/local_planner/cmd_vel"
+LOCAL_ODOM_TOPIC="/local_planner/sim_odom"
+# 1: fixed-map closed-loop simulation; 0: original bag + LIO localization mode.
+# The closed-loop mode makes the simulated odom and simulated LiDAR the only
+# pose/sensing source after /initialpose, so bag replay cannot move the robot.
+CLOSED_LOOP_SIM=1
+PLANNING_ODOM_TOPIC="$LOCAL_ODOM_TOPIC"
 
 BUILD_ON_START=1
 ENABLE_RVIZ=true
 ENABLE_SCAN_CONTEXT=false
+KEEP_RUNNING_AFTER_PASS=1
 # 给 LIO 和自动 initialpose 订阅端留出 DDS 建联时间，避免错过 bag 首帧。
 BAG_START_DELAY="5.0"
 
@@ -33,21 +40,21 @@ BAG_START_DELAY="5.0"
 #   rviz = 等待你在 RViz 使用 2D Pose Estimate
 #   auto = 首个有效 raw odom 到达时自动绑定下面给出的 map 位姿
 INIT_MODE="auto"
-# Campus3 首个有效 body pose 在固定 PCD map 中的坐标。
-INIT_X="-0.486968411"
-INIT_Y="-0.004603802"
-INIT_Z="0.386248173"
-INIT_YAW_RAD="-1.568037370"
+# 固定 PCD map 中已验证连通的同层起点。
+INIT_X="-0.857"
+INIT_Y="15.018"
+INIT_Z="0.520"
+INIT_YAW_RAD="-1.467"
 
 # goal:
 #   rviz = 等待你在 RViz 使用 Goal Tool（发布 /goal_pose）
 #   auto = 脚本自动发布下面给出的 map 目标
 #   off  = 只验收定位，不做规划
 GOAL_MODE="auto"
-# Campus3 同层轨迹上的前向验收点，已验证与运行时起点处于同一连通域。
-GOAL_X="-0.980758635"
-GOAL_Y="17.942173179"
-GOAL_Z="0.390575584"
+# 固定 PCD map 中与起点处于同一连通域的前向验收点。
+GOAL_X="-1.150"
+GOAL_Y="27.000"
+GOAL_Z="0.286"
 GOAL_YAW_RAD="-1.468445495"
 
 STARTUP_TIMEOUT=90
@@ -57,12 +64,14 @@ LOCALIZATION_TIMEOUT=120
 GOAL_TIMEOUT=300
 PLAN_TIMEOUT=120
 PLANAR_RPY_TOL_DEG="0.50"
+TF_CHECK_TIMEOUT=5
 
 # 自动验收在预录轨迹进入已验证的同层连通段后再发 Goal。
 # 触发点由 INIT/GOAL 自动插值，不是第 9、10 个用户坐标参数。
 AUTO_GOAL_TRIGGER_PROGRESS="0.50"
 AUTO_GOAL_TRIGGER_RADIUS_XY="1.00"
 AUTO_GOAL_TRIGGER_MAX_Z_ERROR="1.00"
+AUTO_GOAL_SAME_FLOOR_MAX_PROGRESS="1.35"
 
 RUN_DIR="/tmp/nav3d_one_window"
 LOG_FILE="$RUN_DIR/bringup.log"
@@ -457,7 +466,14 @@ from rclpy.qos import qos_profile_sensor_data
 topic = sys.argv[1]
 target_x, target_y, target_z = map(float, sys.argv[2:5])
 radius_xy, max_z_error, timeout_s = map(float, sys.argv[5:8])
-state = {'matched': None, 'failure': None, 'previous_stamp': None}
+state = {
+    'matched': None,
+    'failure': None,
+    'previous_stamp': None,
+    'last_pose': None,
+    'closest_pose': None,
+    'closest_score': None,
+}
 
 
 def callback(msg):
@@ -488,10 +504,16 @@ def callback(msg):
     distance_xy = math.hypot(
         pose.position.x - target_x, pose.position.y - target_y)
     z_error = abs(pose.position.z - target_z)
+    current_pose = (
+        pose.position.x, pose.position.y, pose.position.z,
+        distance_xy, z_error, stamp)
+    score = distance_xy + z_error
+    state['last_pose'] = current_pose
+    if state['closest_score'] is None or score < state['closest_score']:
+        state['closest_score'] = score
+        state['closest_pose'] = current_pose
     if distance_xy <= radius_xy and z_error <= max_z_error:
-        state['matched'] = (
-            pose.position.x, pose.position.y, pose.position.z,
-            distance_xy, z_error, stamp)
+        state['matched'] = current_pose
 
 
 rclpy.init()
@@ -513,12 +535,119 @@ if state['matched'] is None:
     print(
         f"[FAIL] 定位未在 {timeout_s:.1f}s 内到达自动 Goal 触发区: "
         f"target=({target_x:.3f}, {target_y:.3f}, {target_z:.3f})")
+    if state['closest_pose'] is not None:
+        x, y, z, distance_xy, z_error, stamp = state['closest_pose']
+        print(
+            f"[FAIL] 最接近触发区的定位: actual=({x:.3f}, {y:.3f}, {z:.3f}) "
+            f"distance_xy={distance_xy:.3f} z_error={z_error:.3f} stamp_ns={stamp}")
+    if state['last_pose'] is not None:
+        x, y, z, distance_xy, z_error, stamp = state['last_pose']
+        print(
+            f"[FAIL] 最近一帧定位: actual=({x:.3f}, {y:.3f}, {z:.3f}) "
+            f"distance_xy={distance_xy:.3f} z_error={z_error:.3f} stamp_ns={stamp}")
     sys.exit(3)
 
 x, y, z, distance_xy, z_error, stamp = state['matched']
 print(
     f"[PASS] 已到达自动 Goal 触发区: actual=({x:.3f}, {y:.3f}, {z:.3f}) "
     f"distance_xy={distance_xy:.3f} z_error={z_error:.3f} stamp_ns={stamp}")
+PY
+}
+
+latest_odom_same_floor_as_goal() {
+  local topic="$1"
+  local init_x="$2"
+  local init_y="$3"
+  local init_z="$4"
+  local goal_x="$5"
+  local goal_y="$6"
+  local goal_z="$7"
+  local max_z_error="$8"
+  local max_progress="$9"
+  local timeout_s="${10}"
+
+  python3 - \
+    "$topic" "$init_x" "$init_y" "$init_z" \
+    "$goal_x" "$goal_y" "$goal_z" \
+    "$max_z_error" "$max_progress" "$timeout_s" <<'PY'
+import math
+import sys
+import time
+
+import rclpy
+from nav_msgs.msg import Odometry
+from rclpy.qos import qos_profile_sensor_data
+
+
+topic = sys.argv[1]
+init = tuple(map(float, sys.argv[2:5]))
+goal = tuple(map(float, sys.argv[5:8]))
+max_z_error = float(sys.argv[8])
+max_progress = float(sys.argv[9])
+timeout_s = float(sys.argv[10])
+state = {'pose': None, 'failure': None}
+segment = (
+    goal[0] - init[0],
+    goal[1] - init[1],
+    goal[2] - init[2],
+)
+segment_norm2 = sum(value * value for value in segment)
+
+
+def callback(msg):
+    if state['pose'] is not None or state['failure'] is not None:
+        return
+    if msg.header.frame_id != 'map' or msg.child_frame_id != 'base_link':
+        state['failure'] = (
+            f"invalid frame {msg.header.frame_id!r}->{msg.child_frame_id!r}")
+        return
+
+    pose = msg.pose.pose
+    values = (
+        pose.position.x, pose.position.y, pose.position.z,
+        pose.orientation.x, pose.orientation.y,
+        pose.orientation.z, pose.orientation.w,
+    )
+    if not all(math.isfinite(value) for value in values):
+        state['failure'] = 'pose contains NaN or Inf'
+        return
+
+    stamp = int(msg.header.stamp.sec) * 1_000_000_000 + msg.header.stamp.nanosec
+    position = (pose.position.x, pose.position.y, pose.position.z)
+    z_error = abs(position[2] - goal[2])
+    progress = 0.0
+    if segment_norm2 > 1.0e-12:
+        progress = sum(
+            (position[i] - init[i]) * segment[i] for i in range(3)) / segment_norm2
+    state['pose'] = (
+        position[0], position[1], position[2], z_error, progress, stamp)
+
+
+rclpy.init()
+node = rclpy.create_node('nav3d_goal_floor_checker')
+node.create_subscription(Odometry, topic, callback, qos_profile_sensor_data)
+deadline = time.monotonic() + timeout_s
+try:
+    while state['pose'] is None and state['failure'] is None and time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.1)
+finally:
+    node.destroy_node()
+    rclpy.shutdown()
+
+if state['failure'] is not None:
+    print(f"[FAIL] Goal 同层检查定位无效: {state['failure']}")
+    sys.exit(2)
+if state['pose'] is None:
+    print(f"[FAIL] Goal 同层检查未在 {timeout_s:.1f}s 内收到定位")
+    sys.exit(3)
+
+x, y, z, z_error, progress, stamp = state['pose']
+print(
+    f"[OK] Goal 同层检查: current=({x:.3f}, {y:.3f}, {z:.3f}) "
+    f"goal_z={goal[2]:.3f} z_error={z_error:.3f} "
+    f"route_progress={progress:.3f} stamp_ns={stamp}")
+if z_error > max_z_error or progress < -0.10 or progress > max_progress:
+    sys.exit(4)
 PY
 }
 
@@ -620,6 +749,95 @@ print(
 PY
 }
 
+require_tf_transform() {
+  local target_frame="$1"
+  local source_frame="$2"
+  local timeout_s="$3"
+  local label="$4"
+  local target_safe source_safe outfile
+
+  target_safe="${target_frame//\//_}"
+  source_safe="${source_frame//\//_}"
+  outfile="$RUN_DIR/tf_${target_safe}_${source_safe}.txt"
+
+  python3 - "$target_frame" "$source_frame" "$timeout_s" >"$outfile" 2>&1 <<'PY' || true
+import math
+import sys
+import time
+
+import rclpy
+from tf2_ros import Buffer, TransformListener
+
+
+target_frame, source_frame, timeout_s = sys.argv[1], sys.argv[2], float(sys.argv[3])
+rclpy.init()
+node = rclpy.create_node('nav3d_tf_once_checker')
+buffer = Buffer()
+listener = TransformListener(buffer, node)
+deadline = time.monotonic() + timeout_s
+last_error = ''
+try:
+    while time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.05)
+        try:
+            transform = buffer.lookup_transform(
+                target_frame, source_frame, rclpy.time.Time())
+            translation = transform.transform.translation
+            rotation = transform.transform.rotation
+            print('Translation:')
+            print(
+                f'- Translation: [{translation.x:.3f}, '
+                f'{translation.y:.3f}, {translation.z:.3f}]')
+            print(
+                f'- Rotation: in Quaternion (xyzw) '
+                f'[{rotation.x:.3f}, {rotation.y:.3f}, '
+                f'{rotation.z:.3f}, {rotation.w:.3f}]')
+            sys.exit(0)
+        except Exception as exc:  # tf2 exposes several distro-specific errors.
+            last_error = str(exc)
+finally:
+    node.destroy_node()
+    rclpy.shutdown()
+
+print(f'No transform {target_frame} -> {source_frame}: {last_error}')
+sys.exit(1)
+PY
+
+  if grep -q "Translation:" "$outfile"; then
+    echo "[PASS] TF 连通: $label ($target_frame -> $source_frame)"
+    grep -m 1 -A 2 "Translation:" "$outfile" || true
+    return 0
+  fi
+
+  echo "[FAIL] TF 不连通: $label ($target_frame -> $source_frame)"
+  tail -n 8 "$outfile" || true
+  return 1
+}
+
+require_robot_tf_chain() {
+  require_tf_transform "map" "base_link" "$TF_CHECK_TIMEOUT" "定位输出 map->base_link" \
+    || return 1
+  require_tf_transform "map" "lidar_frame" "$TF_CHECK_TIMEOUT" "雷达外参链 map->base_link->lidar_frame" \
+    || return 1
+}
+
+require_scan_tf_chain() {
+  require_robot_tf_chain || return 1
+  require_tf_transform "map" "sliding_map" "$TF_CHECK_TIMEOUT" "SCAN 滑窗 map->sliding_map" \
+    || return 1
+}
+
+fail_if_local_planner_emergency() {
+  local match
+  match="$(rg -n -m 1 "Replan failed [0-9]+ times|EMERGENCY_STOP" "$LOG_FILE" 2>/dev/null || true)"
+  if [[ -n "$match" ]]; then
+    echo "[FAIL] 局部规划进入 emergency/replan failure:"
+    echo "$match"
+    return 1
+  fi
+  return 0
+}
+
 check_bag_player() {
   ros2 node list 2>/dev/null | grep -Eqi 'rosbag|player'
 }
@@ -658,6 +876,7 @@ echo "[OK] MAP       = $MAP_PATH"
 echo "[OK] INIT      = $INIT_X,$INIT_Y,$INIT_Z,$INIT_YAW_RAD"
 echo "[OK] GOAL      = $GOAL_X,$GOAL_Y,$GOAL_Z,$GOAL_YAW_RAD"
 echo "[OK] ALIGNMENT = planar map->odom, roll/pitch tolerance ${PLANAR_RPY_TOL_DEG} deg"
+echo "[OK] POST_PASS = $([[ "$KEEP_RUNNING_AFTER_PASS" -eq 1 ]] && echo keep_running || echo auto_cleanup)"
 
 check_start_clean
 refresh_ros_graph
@@ -680,6 +899,7 @@ if [[ "$BUILD_ON_START" -eq 1 ]]; then
       lio_localization \
       map_loader \
       global_planner \
+      local_sensing_node \
       bringup \
       scan_planner \
       scan_planner_msgs \
@@ -713,9 +933,18 @@ elif [[ "$INIT_MODE" != "rviz" ]]; then
   die "INIT_MODE 只支持 auto 或 rviz，当前值为: $INIT_MODE"
 fi
 
+RUN_MODE="bag"
+USE_LOCALIZATION="true"
+if [[ "$CLOSED_LOOP_SIM" -eq 1 ]]; then
+  RUN_MODE="sim"
+  USE_LOCALIZATION="false"
+  AUTO_INITIALPOSE="false"
+  INITIALPOSE_ARG="$INIT_X,$INIT_Y,$INIT_Z,$INIT_YAW_RAD"
+fi
+
 setsid --wait ros2 launch bringup bringup_nav3d.launch.py \
-  mode:=bag \
-  use_localization:=true \
+  mode:="$RUN_MODE" \
+  use_localization:="$USE_LOCALIZATION" \
   bag_path:="$BAG_PATH" \
   bag_loop:=false \
   bag_start_delay:="$BAG_START_DELAY" \
@@ -743,26 +972,30 @@ ERROR_MONITOR_PID=$!
 # =========================
 step "4/10 等待核心接口出现"
 
-wait_topic_exists "/livox/imu" "$STARTUP_TIMEOUT" \
-  || die "[分类] LIO failure: 未发现 LIO IMU 输入 /livox/imu"
+if [[ "$CLOSED_LOOP_SIM" -eq 1 ]]; then
+  echo "[模式] 固定地图闭环仿真：不启动 rosbag/LIO，统一使用 /cmd_vel -> $LOCAL_ODOM_TOPIC"
+else
+  wait_topic_exists "/livox/imu" "$STARTUP_TIMEOUT" \
+    || die "[分类] LIO failure: 未发现 LIO IMU 输入 /livox/imu"
 
-wait_topic_exists "/livox/lidar" "$STARTUP_TIMEOUT" \
-  || die "[分类] LIO failure: 未发现 LIO LiDAR 输入 /livox/lidar"
+  wait_topic_exists "/livox/lidar" "$STARTUP_TIMEOUT" \
+    || die "[分类] LIO failure: 未发现 LIO LiDAR 输入 /livox/lidar"
 
-require_single_node "/rosbag2_player" \
-  || die "[分类] LIO failure: rosbag2_player 实例数不为 1"
+  require_single_node "/rosbag2_player" \
+    || die "[分类] LIO failure: rosbag2_player 实例数不为 1"
 
-require_single_publisher "/livox/imu" "LIO IMU 输入" \
-  || die "[分类] LIO failure: /livox/imu publisher 数量不是 1"
+  require_single_publisher "/livox/imu" "LIO IMU 输入" \
+    || die "[分类] LIO failure: /livox/imu publisher 数量不是 1"
 
-require_single_publisher "/livox/lidar" "LIO LiDAR 输入" \
-  || die "[分类] LIO failure: /livox/lidar publisher 数量不是 1"
+  require_single_publisher "/livox/lidar" "LIO LiDAR 输入" \
+    || die "[分类] LIO failure: /livox/lidar publisher 数量不是 1"
 
-wait_topic_exists "/lio/mapping/odom_body" "$STARTUP_TIMEOUT" \
-  || die "[分类] LIO failure: 未发现 /lio/mapping/odom_body"
+  wait_topic_exists "/lio/mapping/odom_body" "$STARTUP_TIMEOUT" \
+    || die "[分类] LIO failure: 未发现 /lio/mapping/odom_body"
 
-require_single_publisher "/lio/mapping/odom_body" "LIO 原始里程计输出" \
-  || die "[分类] LIO failure: /lio/mapping/odom_body publisher 数量不是 1"
+  require_single_publisher "/lio/mapping/odom_body" "LIO 原始里程计输出" \
+    || die "[分类] LIO failure: /lio/mapping/odom_body publisher 数量不是 1"
+fi
 
 wait_topic_exists "/initialpose" "$STARTUP_TIMEOUT" \
   || die "[分类] Localization failure: 未发现 /initialpose"
@@ -782,26 +1015,40 @@ wait_topic_exists "$CMD_VEL_TOPIC" "$STARTUP_TIMEOUT" \
 require_single_publisher "$CMD_VEL_TOPIC" "局部控制输出" \
   || die "[分类] Local planning failure: $CMD_VEL_TOPIC publisher 数量不是 1"
 
+wait_topic_exists "$LOCAL_ODOM_TOPIC" "$STARTUP_TIMEOUT" \
+  || die "[分类] Local planning failure: 未发现 $LOCAL_ODOM_TOPIC"
+
+require_single_publisher "$LOCAL_ODOM_TOPIC" "局部闭环 odom" \
+  || die "[分类] Local planning failure: $LOCAL_ODOM_TOPIC publisher 数量不是 1"
+
 echo
 echo "[检查] /initialpose 连接关系："
 ros2 topic info /initialpose -v || true
 
-if ! ros2 topic info /initialpose -v 2>/dev/null | grep -q "Node name: localization_composer"; then
+if [[ "$CLOSED_LOOP_SIM" -eq 1 ]]; then
+  if ! ros2 topic info /initialpose -v 2>/dev/null | grep -q "Node name: go2_kinematic_sim"; then
+    die "go2_kinematic_sim 没有订阅 /initialpose"
+  fi
+  echo "[OK] go2_kinematic_sim 已订阅 /initialpose"
+elif ! ros2 topic info /initialpose -v 2>/dev/null | grep -q "Node name: localization_composer"; then
   die "localization_composer 没有订阅 /initialpose"
+else
+  echo "[OK] localization_composer 已订阅 /initialpose"
 fi
-echo "[OK] localization_composer 已订阅 /initialpose"
 
 # =========================
 # 5. 确认 LIO 数据真的在流动
 # =========================
-step "5/10 等待 LIO 原始里程计数据"
+if [[ "$CLOSED_LOOP_SIM" -eq 0 ]]; then
+  step "5/10 等待 LIO 原始里程计数据"
 
-if ! validate_odom_stream \
-  "/lio/mapping/odom_body" 20 "$DATA_TIMEOUT" "odom" "LIO 原始里程计"; then
-  if ! check_bag_player; then
-    die "[分类] LIO failure: 连续验证 /lio/mapping/odom_body 失败，且 rosbag player 已不存在"
+  if ! validate_odom_stream \
+    "/lio/mapping/odom_body" 20 "$DATA_TIMEOUT" "odom" "LIO 原始里程计"; then
+    if ! check_bag_player; then
+      die "[分类] LIO failure: 连续验证 /lio/mapping/odom_body 失败，且 rosbag player 已不存在"
+    fi
+    die "[分类] LIO failure: /lio/mapping/odom_body 未通过连续 finite/单调时间戳验证"
   fi
-  die "[分类] LIO failure: /lio/mapping/odom_body 未通过连续 finite/单调时间戳验证"
 fi
 
 # =========================
@@ -809,7 +1056,18 @@ fi
 # =========================
 step "6/10 建立 map -> odom 初始定位"
 
-if [[ "$INIT_MODE" == "auto" ]]; then
+if [[ "$CLOSED_LOOP_SIM" -eq 1 ]]; then
+  read -r INIT_QZ INIT_QW < <(quat_from_yaw "$INIT_YAW_RAD")
+  echo "[自动] 发布闭环仿真初始位姿 /initialpose:"
+  echo "       x=$INIT_X y=$INIT_Y z=$INIT_Z yaw=$INIT_YAW_RAD"
+  ros2 topic pub --once --wait-matching-subscriptions 1 --keep-alive 1.0 \
+    /initialpose \
+    geometry_msgs/msg/PoseWithCovarianceStamped \
+    "{header: {frame_id: map}, pose: {pose: {position: {x: $INIT_X, y: $INIT_Y, z: $INIT_Z}, orientation: {x: 0.0, y: 0.0, z: $INIT_QZ, w: $INIT_QW}}}}" \
+    >/dev/null \
+    || die "[分类] Localization failure: 闭环仿真 /initialpose 发布失败"
+  echo "[OK] 已向 go2_kinematic_sim 发布 map 初始位姿；后续以 $PLANNING_ODOM_TOPIC 连续输出验收"
+elif [[ "$INIT_MODE" == "auto" ]]; then
   echo "[自动] 首个有效 raw odom 已绑定到 map 位姿:"
   echo "       x=$INIT_X y=$INIT_Y z=$INIT_Z yaw=$INIT_YAW_RAD"
   if ! wait_log_pattern "Published configured map-frame /initialpose" "$INITIALPOSE_TIMEOUT"; then
@@ -843,31 +1101,38 @@ fi
 # =========================
 # 7. 定位验收
 # =========================
-step "7/10 等待合成定位 /lio/localization/odom"
+step "7/10 等待统一闭环定位 $PLANNING_ODOM_TOPIC"
 
-if ! wait_topic_exists "/lio/localization/odom" "$LOCALIZATION_TIMEOUT"; then
-  die "[分类] Localization failure: 没有出现 /lio/localization/odom"
+if ! wait_topic_exists "$PLANNING_ODOM_TOPIC" "$LOCALIZATION_TIMEOUT"; then
+  die "[分类] Localization failure: 没有出现 $PLANNING_ODOM_TOPIC"
 fi
 
-require_single_publisher "/lio/localization/odom" "合成定位输出" \
-  || die "[分类] Localization failure: /lio/localization/odom publisher 数量不是 1"
+require_single_publisher "$PLANNING_ODOM_TOPIC" "统一闭环定位输出" \
+  || die "[分类] Localization failure: $PLANNING_ODOM_TOPIC publisher 数量不是 1"
 
 if ! validate_odom_stream \
-  "/lio/localization/odom" 20 "$LOCALIZATION_TIMEOUT" "map" "合成定位里程计"; then
-  if ! check_bag_player; then
-    die "[分类] Localization failure: 连续验证 /lio/localization/odom 失败，且 rosbag player 已不存在"
+  "$PLANNING_ODOM_TOPIC" 20 "$LOCALIZATION_TIMEOUT" "map" "统一闭环定位里程计"; then
+  if [[ "$CLOSED_LOOP_SIM" -eq 0 ]] && ! check_bag_player; then
+    die "[分类] Localization failure: 连续验证 $PLANNING_ODOM_TOPIC 失败，且 rosbag player 已不存在"
   fi
-  die "[分类] Localization failure: /lio/localization/odom 未通过连续 finite/单调时间戳验证"
+  die "[分类] Localization failure: $PLANNING_ODOM_TOPIC 未通过连续 finite/单调时间戳验证"
 fi
 
-echo
-echo "---- 定位相关日志 ----"
-grep -E "Initialized map -> odom|Published fixed-map ICP correction|Updated map -> odom|Ignoring pose correction" \
-  "$LOG_FILE" | tail -n 25 || true
-echo "----------------------"
+if [[ "$CLOSED_LOOP_SIM" -eq 0 ]]; then
+  echo
+  echo "---- 定位相关日志 ----"
+  grep -E "Initialized map -> odom|Published fixed-map ICP correction|Updated map -> odom|Ignoring pose correction" \
+    "$LOG_FILE" | tail -n 25 || true
+  echo "----------------------"
 
-validate_planar_alignment_log "$LOG_FILE" "$PLANAR_RPY_TOL_DEG" \
-  || die "[分类] Localization failure: map->odom 被 full SE3 或 roll/pitch 倾斜污染"
+  validate_planar_alignment_log "$LOG_FILE" "$PLANAR_RPY_TOL_DEG" \
+    || die "[分类] Localization failure: map->odom 被 full SE3 或 roll/pitch 倾斜污染"
+else
+  echo "[PASS] 定位来源唯一：$PLANNING_ODOM_TOPIC，由 /cmd_vel 闭环模拟器发布"
+fi
+
+require_robot_tf_chain \
+  || die "[分类] Localization/TF failure: map->base_link->lidar_frame TF 树不连通"
 
 if grep -q "Initialized map -> odom" "$LOG_FILE"; then
   echo "[PASS] 已找到 Initialized map -> odom"
@@ -892,21 +1157,33 @@ fi
 echo "[OK] Global Planner 地图已完成初始化"
 
 if ! validate_odom_stream \
-  "/lio/localization/odom" 1 "$LOCALIZATION_TIMEOUT" "map" "Goal 前最新定位"; then
+  "$PLANNING_ODOM_TOPIC" 1 "$LOCALIZATION_TIMEOUT" "map" "Goal 前最新定位"; then
   die "[分类] Localization failure: 发布 goal 前最新定位不是有效 map -> base_link"
 fi
 echo "[OK] 发布 goal 前最新 localization 已通过 frame/finite 检查"
+
+require_robot_tf_chain \
+  || die "[分类] Localization/TF failure: 发布 goal 前 map->base_link->lidar_frame TF 已断开"
 
 if [[ "$GOAL_MODE" == "auto" ]]; then
   [[ -n "$GOAL_X" && -n "$GOAL_Y" && -n "$GOAL_Z" && -n "$GOAL_YAW_RAD" ]] \
     || die "GOAL_MODE=auto，但 GOAL_X/Y/Z/YAW_RAD 没有全部填写"
 
   if [[ "$INIT_MODE" == "auto" ]]; then
-    read -r GOAL_TRIGGER_X GOAL_TRIGGER_Y GOAL_TRIGGER_Z < <(
-      python3 - \
-        "$INIT_X" "$INIT_Y" "$INIT_Z" \
-        "$GOAL_X" "$GOAL_Y" "$GOAL_Z" \
-        "$AUTO_GOAL_TRIGGER_PROGRESS" <<'PY'
+    if [[ "$CLOSED_LOOP_SIM" -eq 1 ]] || latest_odom_same_floor_as_goal \
+      "$PLANNING_ODOM_TOPIC" \
+      "$INIT_X" "$INIT_Y" "$INIT_Z" \
+      "$GOAL_X" "$GOAL_Y" "$GOAL_Z" \
+      "$AUTO_GOAL_TRIGGER_MAX_Z_ERROR" \
+      "$AUTO_GOAL_SAME_FLOOR_MAX_PROGRESS" \
+      "$LOCALIZATION_TIMEOUT"; then
+      echo "[自动] 当前定位已与 goal 同层，跳过中间触发点等待。"
+    else
+      read -r GOAL_TRIGGER_X GOAL_TRIGGER_Y GOAL_TRIGGER_Z < <(
+        python3 - \
+          "$INIT_X" "$INIT_Y" "$INIT_Z" \
+          "$GOAL_X" "$GOAL_Y" "$GOAL_Z" \
+          "$AUTO_GOAL_TRIGGER_PROGRESS" <<'PY'
 import sys
 
 start = tuple(map(float, sys.argv[1:4]))
@@ -915,16 +1192,20 @@ progress = float(sys.argv[7])
 trigger = tuple(a + progress * (b - a) for a, b in zip(start, goal))
 print(*(f'{value:.9f}' for value in trigger))
 PY
-    )
+      )
 
-    echo "[自动] 等待预录定位进入已验证的同层规划段:"
-    echo "       target=($GOAL_TRIGGER_X, $GOAL_TRIGGER_Y, $GOAL_TRIGGER_Z)"
-    if ! wait_odom_near_pose \
-      "/lio/localization/odom" \
-      "$GOAL_TRIGGER_X" "$GOAL_TRIGGER_Y" "$GOAL_TRIGGER_Z" \
-      "$AUTO_GOAL_TRIGGER_RADIUS_XY" "$AUTO_GOAL_TRIGGER_MAX_Z_ERROR" \
-      "$LOCALIZATION_TIMEOUT"; then
-      die "[分类] Localization failure: 未到达自动 Goal 的同层触发区"
+      echo "[自动] 当前定位不在 goal 同层，等待预录定位进入已验证的同层规划段:"
+      echo "       target=($GOAL_TRIGGER_X, $GOAL_TRIGGER_Y, $GOAL_TRIGGER_Z)"
+      if ! wait_odom_near_pose \
+        "$PLANNING_ODOM_TOPIC" \
+        "$GOAL_TRIGGER_X" "$GOAL_TRIGGER_Y" "$GOAL_TRIGGER_Z" \
+        "$AUTO_GOAL_TRIGGER_RADIUS_XY" "$AUTO_GOAL_TRIGGER_MAX_Z_ERROR" \
+        "$LOCALIZATION_TIMEOUT"; then
+        if ! check_bag_player; then
+          die "[分类] Localization failure: rosbag 播放结束前未到达自动 Goal 触发区，未发布 /goal_pose"
+        fi
+        die "[分类] Localization failure: 未到达自动 Goal 的同层触发区"
+      fi
     fi
   fi
 
@@ -999,6 +1280,14 @@ else
 fi
 echo "[PASS] 收到 /planning/bspline"
 
+if ! validate_odom_stream \
+  "$LOCAL_ODOM_TOPIC" 3 "$LOCALIZATION_TIMEOUT" "map" "局部规划闭环 odom"; then
+  die "[分类] Local planning failure: 收到局部轨迹后 $LOCAL_ODOM_TOPIC 已停止或无效"
+fi
+
+require_scan_tf_chain \
+  || die "[分类] Local planning/TF failure: 局部规划后 TF 树不完整"
+
 if [[ "$GOAL_MODE" == "auto" ]]; then
   if ! wait_topic_listener "$CMD_VEL_TOPIC" "$CMD_VEL_LISTENER_PID" "$RUN_DIR/cmd_vel.yaml"; then
     die "[分类] Local planning failure: 没有收到 $CMD_VEL_TOPIC"
@@ -1016,29 +1305,45 @@ else
 fi
 echo "[PASS] 收到 $CMD_VEL_TOPIC"
 
+fail_if_local_planner_emergency \
+  || die "[分类] Local planning failure: 收到局部输出后 SCAN 进入 emergency/replan failure"
+
 # =========================
 # 10. 总结
 # =========================
 step "10/10 Nav3D 联合验收 PASS"
 
 echo "已确认："
-echo "  [PASS] /lio/mapping/odom_body"
-echo "  [PASS] /initialpose -> localization_composer"
-echo "  [PASS] /lio/localization/odom"
+if [[ "$CLOSED_LOOP_SIM" -eq 1 ]]; then
+  echo "  [PASS] /initialpose -> go2_kinematic_sim"
+  echo "  [PASS] $PLANNING_ODOM_TOPIC (唯一闭环定位输出)"
+  echo "  [PASS] $MAP_PATH -> /local_planner/sim_cloud"
+else
+  echo "  [PASS] /lio/mapping/odom_body"
+  echo "  [PASS] /initialpose -> localization_composer"
+  echo "  [PASS] /lio/localization/odom"
+fi
 echo "  [PASS] /map_loader/octomap"
 echo "  [PASS] /global_planner/path"
 echo "  [PASS] /planning/bspline"
 echo "  [PASS] $CMD_VEL_TOPIC"
+echo "  [PASS] $LOCAL_ODOM_TOPIC"
+echo "  [PASS] TF map->base_link->lidar_frame"
+echo "  [PASS] TF map->sliding_map"
 echo
 echo "bringup 日志：$LOG_FILE"
 echo
-echo "脚本会继续保持 bringup 运行。"
-echo "按 Ctrl+C 时，本脚本会清理它启动的 bringup。"
 ACCEPTANCE_PASSED=1
 
-# 保持当前单窗口会话，避免脚本结束后自动清理 bringup
-while kill -0 "$LAUNCH_PID" 2>/dev/null; do
-  sleep 2
-done
+if [[ "$KEEP_RUNNING_AFTER_PASS" -eq 1 ]]; then
+  echo "脚本会继续保持 bringup 运行；bag 播放结束后 TF 会自然过期。"
+  echo "按 Ctrl+C 时，本脚本会清理它启动的 bringup。"
+  while kill -0 "$LAUNCH_PID" 2>/dev/null; do
+    sleep 2
+  done
+else
+  echo "联合验收已通过；默认自动清理 bringup，避免 bag 结束后的残留 TF 画面造成误判。"
+  exit 0
+fi
 
 die "bringup 进程已退出"

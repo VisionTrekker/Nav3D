@@ -54,6 +54,9 @@ deque<double> comp_time_vec;
 
 std::string quad_name;
 std::string sensor_type_ = "depth";
+std::string world_frame_id_ = "world";
+std::string sensor_frame_id_ = "sensor";
+bool publish_tf_ = true;
 std::tr1::unordered_map<int, std::vector<PointType>> point_hashmap;
 std::tr1::unordered_map<int, std::vector<int>> pointindex_hashmap;
 
@@ -199,7 +202,7 @@ nav_msgs::msg::Odometry makeSensorPoseMsg(const nav_msgs::msg::Odometry &body_od
 
   nav_msgs::msg::Odometry sensor_odom;
   sensor_odom.header = body_odom.header;
-  sensor_odom.header.frame_id = "world";
+  sensor_odom.header.frame_id = world_frame_id_;
   sensor_odom.child_frame_id = child_frame_id;
   sensor_odom.pose.pose.position.x = sensor_pose(0, 3);
   sensor_odom.pose.pose.position.y = sensor_pose(1, 3);
@@ -699,7 +702,7 @@ void dynobjGenerate()
 
     pcl::toROSMsg(dynobj_points_vis, dynobj_points_pcd);
     dynobj_points_pcd.header = odom_.header;
-    dynobj_points_pcd.header.frame_id = "world";
+    dynobj_points_pcd.header.frame_id = world_frame_id_;
     pub_dyncloud->publish(dynobj_points_pcd);
 
     kdtree_dyn.setInputCloud(dynobj_points_vis.makeShared());
@@ -781,7 +784,7 @@ void multiOdometryCallback(const nav_msgs::msg::Odometry::ConstSharedPtr msg, in
   // publish uav point cloud
   sensor_msgs::msg::PointCloud2 otheruav_points_vis_pcd;
   pcl::toROSMsg(otheruav_points_vis, otheruav_points_vis_pcd);
-  otheruav_points_vis_pcd.header.frame_id = "world";
+  otheruav_points_vis_pcd.header.frame_id = world_frame_id_;
   otheruav_points_vis_pcd.header.stamp = ros_node->now();
   pub_uavcloud->publish(otheruav_points_vis_pcd);
 }
@@ -1953,15 +1956,14 @@ shared(use_avia_pattern, use_vlp32_pattern, use_minicf_pattern, is_360lidar,    
 
   pcl::toROSMsg(local_map_filled, local_map_pcd);
   local_map_pcd.header = odom_.header;
-  local_map_pcd.header.frame_id = "world";
+  local_map_pcd.header.frame_id = world_frame_id_;
   pub_cloud->publish(local_map_pcd);
 
   // transform
-  std::string sensor_frame_id_ = "sensor";
   geometry_msgs::msg::TransformStamped transform;
   rclcpp::Time time_stamp_(odom_.header.stamp);
   transform.header.stamp = time_stamp_;
-  transform.header.frame_id = "world";
+  transform.header.frame_id = world_frame_id_;
   transform.child_frame_id = sensor_frame_id_;
 
   transform.transform.translation.x = pos.x();
@@ -1972,7 +1974,10 @@ shared(use_avia_pattern, use_vlp32_pattern, use_minicf_pattern, is_360lidar,    
   transform.transform.rotation.z = q.z();
   transform.transform.rotation.w = q.w();
 
-  tf_broadcaster->sendTransform(transform);
+  if (publish_tf_)
+  {
+    tf_broadcaster->sendTransform(transform);
+  }
 
   Eigen::Matrix4d sensor2world;
   sensor2world << rot(0, 0), rot(0, 1), rot(0, 2), pos.x(),
@@ -2020,6 +2025,9 @@ int main(int argc, char **argv)
 
   quad_name = ros_node->declare_parameter<std::string>("quadrotor_name", "quad_0");
   sensor_type_ = ros_node->declare_parameter<std::string>("sensor_type", "depth");
+  world_frame_id_ = ros_node->declare_parameter<std::string>("world_frame_id", "world");
+  sensor_frame_id_ = ros_node->declare_parameter<std::string>("sensor_frame_id", "sensor");
+  publish_tf_ = ros_node->declare_parameter<bool>("publish_tf", true);
   if (!useDepthSensor() && !useLidarSensor())
   {
     RCLCPP_ERROR(ros_node->get_logger(), "Unsupported sensor_type '%s'. Expected 'depth' or 'lidar'.", sensor_type_.c_str());

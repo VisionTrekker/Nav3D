@@ -165,6 +165,33 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /global_planner/path
       Value: true
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz_default_plugins/Odometry
+      Color: 255; 214; 10
+      Enabled: true
+      Keep: 100
+      Name: Local Closed-Loop Odom
+      Position Tolerance: 0.10000000149011612
+      Shape: Axes
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /local_planner/sim_odom
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: SCAN Sliding Window
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /grid_map/sliding_map_bbox
+      Value: true
     - Class: rviz_default_plugins/InteractiveMarkers
       Enable Transparency: true
       Enabled: true

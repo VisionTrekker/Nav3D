@@ -95,6 +95,9 @@ def _setup(context):
     global_cfg = config["global"]
     scan_cfg = config["scan"]
     safety_cfg = config["safety"]
+    use_cmd_odom_feedback = bool(scan_cfg.get("use_cmd_odom_feedback", False))
+    use_simulated_sensing = bool(scan_cfg.get("use_simulated_sensing", False))
+    local_odom_topic = topics.get("local_odom", topics["odom"])
     pcd_map_file = pcd_map_override or global_cfg["pcd_map_file"]
     planner_yaml = os.path.join(scan_share, "config", "planner.yaml")
     controllers_yaml = os.path.join(scan_share, "config", "controllers.yaml")
@@ -140,7 +143,9 @@ def _setup(context):
         "grid_map.body_height": float(scan_cfg["body_height"]),
     }
 
-    return [
+    planning_odom_topic = local_odom_topic if use_cmd_odom_feedback else topics["odom"]
+
+    actions = [
         Node(
             package="map_loader",
             executable="map_loader_node",
@@ -166,12 +171,55 @@ def _setup(context):
                 "expected_octomap_resolution": expected_octomap_resolution,
                 "use_octomap_topic": True,
                 "octomap_topic": topics["octomap"],
-                "odom_topic": topics["odom"],
-                "require_map_frame_odom": topics["odom"] == "/lio/localization/odom",
+                "odom_topic": planning_odom_topic,
+                "require_map_frame_odom": planning_odom_topic == "/lio/localization/odom" or
+                use_cmd_odom_feedback,
                 "goal_topic": topics["goal_pose"],
                 "path_topic": topics["global_path"],
             }, global_planner_overrides],
         ),
+    ]
+
+    if use_cmd_odom_feedback and use_simulated_sensing:
+        simulated_sensor_frame = scan_cfg.get("simulated_sensor_frame_id", "lidar_frame")
+        actions.extend([
+            Node(
+                package="local_sensing_node",
+                executable="pcl_render_node",
+                name="closed_loop_lidar_simulator",
+                output="screen",
+                parameters=[{
+                    "use_sim_time": False,
+                    "sensor_type": "lidar",
+                    "body_pose_topic": local_odom_topic,
+                    "pcd_map_file": pcd_map_file,
+                    "use_global_map_topic": False,
+                    "world_frame_id": scan_cfg["frame_id"],
+                    "sensor_frame_id": simulated_sensor_frame,
+                    "publish_tf": False,
+                    "sensing_rate": float(scan_cfg.get("simulated_sensor_rate", 10.0)),
+                    "downsample_res": float(
+                        scan_cfg.get("simulated_sensor_downsample_m", 0.15)),
+                }],
+                remappings=[
+                    ("body_pose", local_odom_topic),
+                    ("cloud", topics["cloud"]),
+                    ("sensor_cloud", topics["cloud"] + "/sensor"),
+                ],
+            ),
+            Node(
+                package="tf2_ros",
+                executable="static_transform_publisher",
+                name="sim_base_lidar_publisher",
+                arguments=[
+                    "--x", "0", "--y", "0", "--z", "0",
+                    "--qx", "0", "--qy", "0", "--qz", "0", "--qw", "1",
+                    "--frame-id", "base_link", "--child-frame-id", simulated_sensor_frame,
+                ],
+            ),
+        ])
+
+    actions.extend([
         Node(
             package="scan_planner",
             executable="scan_planner_node",
@@ -179,8 +227,8 @@ def _setup(context):
             output="screen",
             parameters=[planner_yaml, scan_overrides],
             remappings=[
-                ("body_pose", topics["odom"]),
-                ("sensor_pose", topics["sensor_pose"]),
+                ("body_pose", local_odom_topic),
+                ("sensor_pose", local_odom_topic if use_cmd_odom_feedback else topics["sensor_pose"]),
                 ("cloud", topics["cloud"]),
                 ("initial_path", topics["global_path"]),
             ],
@@ -194,7 +242,7 @@ def _setup(context):
             remappings=[
                 ("planning/bspline", topics["bspline"]),
                 ("planning/stop_requested", topics["stop_requested"]),
-                ("body_pose", topics["odom"]),
+                ("body_pose", local_odom_topic),
                 ("cmd_vel", topics["cmd_vel"]),
             ],
         ),
@@ -210,7 +258,35 @@ def _setup(context):
                 ("planning/stop_requested", topics["stop_requested"]),
             ],
         ),
-    ]
+    ])
+
+    if use_cmd_odom_feedback:
+        actions.append(
+            Node(
+                package="scan_planner",
+                executable="go2_kinematic_sim",
+                name="go2_kinematic_sim",
+                output="screen",
+                parameters=[
+                    controllers_yaml,
+                    {
+                        "use_sim_time": False,
+                        "init_odom_topic": "",
+                        "initial_pose_topic": "/initialpose",
+                        "require_initial_pose": True,
+                        "publish_tf": True,
+                        "frame_id": scan_cfg["frame_id"],
+                        "child_frame_id": "base_link",
+                    },
+                ],
+                remappings=[
+                    ("body_pose", local_odom_topic),
+                    ("cmd_vel", topics["cmd_vel"]),
+                ],
+            )
+        )
+
+    return actions
 
 
 def generate_launch_description():

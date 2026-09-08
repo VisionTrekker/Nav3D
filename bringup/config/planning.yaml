@@ -23,18 +23,24 @@ planning:
     goal_pose: "/goal_pose"
     odom: "/lio/localization/odom"
     sensor_pose: "/lio/localization/odom"
-    cloud: "/lio/mapping/clouds_lidar"
+    cloud: "/local_planner/sim_cloud"
     octomap: "/map_loader/octomap"
     global_path: "/global_planner/path"
     bspline: "/planning/bspline"
     cmd_vel: "/local_planner/cmd_vel"
+    local_odom: "/local_planner/sim_odom"
     stop_requested: "/planning/stop_requested"
 
   scan:
     frame_id: "map"
     navi_mode: 3
+    use_cmd_odom_feedback: true
+    use_simulated_sensing: true
+    simulated_sensor_rate: 10.0
+    simulated_sensor_downsample_m: 0.15
+    simulated_sensor_frame_id: "lidar_frame"
     sensor_type: "lidar"
-    cloud_is_world: false
+    cloud_is_world: true
     need_extrinsic: false
     body_height: 0.0
 
